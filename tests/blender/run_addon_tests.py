@@ -240,6 +240,35 @@ def test_bad_inputs_fail_cleanly():
     assert not objs()
 
 
+def test_terrain_site_is_synced_and_skippable():
+    s = fresh()
+    sync(s, ifc("terrain"))
+    sites = [o for o in objs().values() if o["acsync_type"] == "IfcSite"]
+    assert len(sites) == 1 and sites[0].name == "Site"
+    assert sites[0].users_collection[0].name == "AC_Sync - Terrain"
+    assert len(sites[0].data.polygons) == 6
+    assert "0 added, 0 geometry changed" in sync(s, ifc("terrain"))  # stable on re-sync
+    s2 = fresh()
+    s2.skip_site = True
+    sync(s2, ifc("terrain"))
+    assert not [o for o in objs().values() if o["acsync_type"] == "IfcSite"]
+
+
+def test_archicad_coordinates_toggle():
+    s = fresh()
+    sync(s, ifc("a"))
+    plain = [tuple(v.co) for v in objs()[SLAB_GUID].data.vertices]
+    s = fresh()
+    sync(s, ifc("rot"))  # default: undo the IfcSite rotation
+    restored = [tuple(v.co) for v in objs()[SLAB_GUID].data.vertices]
+    assert all(abs(a - b) < 1e-4 for p, r in zip(plain, restored) for a, b in zip(p, r))
+    s.archicad_coordinates = False  # same file, IFC world coordinates -> every object changes
+    summary = sync(s, ifc("rot"))
+    assert "3 geometry changed" in summary, summary
+    rotated = [tuple(v.co) for v in objs()[SLAB_GUID].data.vertices]
+    assert any(abs(a - b) > 0.1 for p, r in zip(plain, rotated) for a, b in zip(p, r))
+
+
 def test_real_model():
     path = os.environ.get("ACSYNC_TEST_IFC")
     if not path:

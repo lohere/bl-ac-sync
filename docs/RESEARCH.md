@@ -90,7 +90,34 @@ setting still to check against Blender.
   (4.1 MB), read 7.3 s, 429 elements, 37.7k faces, 18 surfaces.
 - IFC4 `IfcSpace` has no `Tag`; Archicad zones come out untagged and are excluded anyway.
 
-## 6. Reproducing
+## 6. Terrain, coordinates and what gets exported (measured, 2026-10-17)
+
+- **Archicad Mesh elements become one `IfcSite`.** All meshes are merged into a single
+  `IfcSite` entity (one face set per mesh), which has no `Tag`, so per-mesh GUIDs are lost.
+  The reader imports it as one "Site" object keyed by `ifc:<IfcGlobalId>` (identical in all four
+  test exports). A custom translator that maps Mesh to e.g. `IfcGeographicElement` would give
+  one tagged element per mesh; the reader already handles that case.
+- **The IFC model is rotated.** Archicad bakes Project North into the `IfcSite` placement
+  (here exactly 23.0 degrees about the origin, no translation); raw geometry stays in Archicad
+  model coordinates. After undoing the placement, all 45 slabs and 16 roofs match Archicad's own
+  3D bounding boxes to 0.0000 m (beams/columns within 6-8 cm). The reader does this by default
+  (`archicad_coordinates=True`).
+- **Open: walls, windows and doors deviate from Tapir's `Get3DBoundingBoxes`** by 0.15-0.9 m
+  (e.g. walls longer by 0.15 m at each end, a roof-trimmed wall shorter than Archicad's
+  untrimmed box, windows at different heights). Not understood: the IFC may be right (trims,
+  junctions) and the bounding boxes may be untrimmed or defined differently. Needs a visual
+  comparison before relying on opening positions.
+- **"Export geometries that participate in Collision Detection only"** is **On** in the IFC4
+  Reference View, Exact Geometry and default translators and **Off** in IFC4 Design Transfer.
+  With it On, the two large context meshes (about 300 m, layer 45, storey -2) are not exported:
+  the Site holds 4 face sets. With it Off (Design Transfer) the Site holds 13 items spanning
+  about 365 x 340 m. Fix: duplicate the "IFC4 Reference View-based Export" translator in Archicad,
+  edit its Model Filter and turn that option off. Elements that are not flagged for collision
+  detection (Tags and Categories panel) are silently missing otherwise.
+- Idea: a completeness check comparing Archicad's element counts per type (Tapir
+  `GetElementsByType`) with what the IFC contained, to report silent omissions.
+
+## 7. Reproducing
 
 `tools/research/*.py` are the scripts used (run with a Python that has `ifcopenshell`
 installed, pass IFC paths as arguments). Exports were made with

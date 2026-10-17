@@ -1,7 +1,7 @@
 """Read an Archicad IFC export into plain Python records (no Blender needed).
 
 Matching key is the Archicad element GUID, which Archicad writes into the IFC ``Tag``
-attribute. The Element ID (the label users see, e.g. ``WALL-0231``) is in ``Name``. Element
+attribute (spatial elements such as the terrain ``IfcSite`` use ``ifc:<GlobalId>``). The Element ID (the label users see, e.g. ``WALL-0231``) is in ``Name``. Element
 IDs are *not* unique in Archicad (copy/paste keeps them), the GUID is.
 
 Geometry comes out of ifcopenshell as polygon faces in metres (``POLYHEDRON_WITHOUT_HOLES``:
@@ -20,9 +20,13 @@ from dataclasses import dataclass, field
 from .errors import IfcReadError
 
 # Types that are not useful as Blender geometry by default.
-DEFAULT_EXCLUDED_TYPES = frozenset(
-    {"IfcSpace", "IfcOpeningElement", "IfcSite", "IfcAnnotation", "IfcGrid"}
-)
+DEFAULT_EXCLUDED_TYPES = frozenset({"IfcSpace", "IfcOpeningElement", "IfcAnnotation", "IfcGrid"})
+
+# Spatial elements have no ``Tag`` attribute. Archicad writes all its Mesh (terrain) elements
+# into one IfcSite and zones as IfcSpace, so these are keyed by their IFC GlobalId instead
+# (prefixed so it can never collide with an Archicad GUID).
+GLOBALID_KEYED_TYPES = frozenset({"IfcSite", "IfcSpace"})
+GLOBALID_KEY_PREFIX = "ifc:"
 
 _HASH_PRECISION = 10_000  # 0.1 mm: below this, geometry differences are float noise
 
@@ -96,12 +100,51 @@ def geometry_hash(
     return h.hexdigest()
 
 
+def _site_to_archicad_matrix(ifc):
+    """4x4 matrix undoing the IfcSite placement, or ``None`` if there is nothing to undo.
+
+    Archicad bakes Project North (and the survey point) into the IfcSite placement of its
+    IFC export: raw geometry is in Archicad model coordinates, ifcopenshell's world
+    coordinates are rotated/shifted by that placement. Verified against Archicad's own 3D
+    bounding boxes: after undoing it, all slabs and roofs match to 0.000 m.
+    """
+    import numpy as np
+    from ifcopenshell.util.placement import get_local_placement
+
+    sites = ifc.by_type("IfcSite")
+    if not sites or sites[0].ObjectPlacement is None:
+        return None
+    matrix = np.linalg.inv(get_local_placement(sites[0].ObjectPlacement))
+    if np.allclose(matrix, np.eye(4), atol=1e-9):
+        return None
+    return matrix
+
+
+def _transform(vertices: tuple[float, ...], m) -> tuple[float, ...]:
+    r00, r01, r02, t0 = (float(x) for x in m[0])
+    r10, r11, r12, t1 = (float(x) for x in m[1])
+    r20, r21, r22, t2 = (float(x) for x in m[2])
+    out = []
+    for i in range(0, len(vertices), 3):
+        x, y, z = vertices[i], vertices[i + 1], vertices[i + 2]
+        out.append(r00 * x + r01 * y + r02 * z + t0)
+        out.append(r10 * x + r11 * y + r12 * z + t1)
+        out.append(r20 * x + r21 * y + r22 * z + t2)
+    return tuple(out)
+
+
 def read_ifc(
     path: str | os.PathLike,
     excluded_types: Iterable[str] = DEFAULT_EXCLUDED_TYPES,
     threads: int = 4,
+    archicad_coordinates: bool = True,
 ) -> IfcModel:
-    """Read all geometry-carrying products of an IFC file, keyed by Archicad GUID."""
+    """Read all geometry-carrying products of an IFC file, keyed by Archicad GUID.
+
+    With ``archicad_coordinates`` (default) the IfcSite placement is undone so geometry is in
+    Archicad's own model coordinates (what Archicad and the old FBX export use). Pass False
+    to keep the rotated IFC world coordinates.
+    """
     import ifcopenshell
     from ifcopenshell import geom, ifcopenshell_wrapper
 
@@ -119,6 +162,8 @@ def read_ifc(
     settings = geom.settings()
     settings.set("use-world-coords", True)
     settings.set("triangulation-type", ifcopenshell_wrapper.POLYHEDRON_WITHOUT_HOLES)
+
+    to_archicad = _site_to_archicad_matrix(ifc) if archicad_coordinates else None
 
     exclude_entities = []
     for type_name in excluded:
@@ -141,6 +186,8 @@ def read_ifc(
         entity = ifc.by_id(shape.id)
         element_id = str(getattr(entity, "Name", "") or "")
         guid = getattr(entity, "Tag", None)
+        if not guid and entity.is_a() in GLOBALID_KEYED_TYPES:
+            guid = f"{GLOBALID_KEY_PREFIX}{entity.GlobalId}"
         if not guid:
             model.skipped.append(Skipped(entity.is_a(), element_id, "no Archicad GUID (Tag)"))
         elif guid in model.elements:
@@ -148,7 +195,9 @@ def read_ifc(
                 f"Duplicate GUID {guid} ({element_id}); the second occurrence was ignored."
             )
         else:
-            element = _build_element(ifc, entity, shape.geometry, guid, element_id)
+            element = _build_element(
+                ifc, entity, shape.geometry, guid, element_id, to_archicad
+            )
             if element is None:
                 model.skipped.append(Skipped(entity.is_a(), element_id, "empty geometry"))
             else:
@@ -161,8 +210,12 @@ def read_ifc(
     return model
 
 
-def _build_element(ifc, entity, geometry, guid: str, element_id: str) -> Element | None:
+def _build_element(
+    ifc, entity, geometry, guid: str, element_id: str, to_archicad=None
+) -> Element | None:
     verts = tuple(float(v) for v in geometry.verts)
+    if to_archicad is not None:
+        verts = _transform(verts, to_archicad)
     faces = list(geometry.faces)
     if not verts or not faces:
         return None

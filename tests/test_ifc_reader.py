@@ -103,3 +103,30 @@ def test_real_model(real_ifc):
     assert walls
     surfaces = set(model.surface_names())
     assert not any(s.startswith("IfcSurfaceStyleRendering") for s in surfaces)
+
+
+def test_terrain_ifcsite_is_imported_keyed_by_global_id(tmp_path):
+    path = build_synthetic_ifc(tmp_path / "terrain.ifc", terrain=True)
+    model = read_ifc(path)
+    site_keys = [k for k, e in model.elements.items() if e.ifc_type == "IfcSite"]
+    assert len(site_keys) == 1 and site_keys[0].startswith("ifc:")
+    site = model.elements[site_keys[0]]
+    assert site.element_id == "Site" and site.face_count == 6
+    assert site.global_id == site_keys[0].removeprefix("ifc:")
+
+
+def test_site_can_be_excluded(tmp_path):
+    path = build_synthetic_ifc(tmp_path / "terrain.ifc", terrain=True)
+    model = read_ifc(path, excluded_types=["IfcSite"])
+    assert not [e for e in model.elements.values() if e.ifc_type == "IfcSite"]
+
+
+def test_site_rotation_is_undone_by_default(tmp_path):
+    plain = read_ifc(build_synthetic_ifc(tmp_path / "plain.ifc")).elements[SLAB_GUID]
+    path = build_synthetic_ifc(tmp_path / "rot.ifc", site_rotation_deg=23.0)
+    restored = read_ifc(path).elements[SLAB_GUID]
+    rotated = read_ifc(path, archicad_coordinates=False).elements[SLAB_GUID]
+    assert restored.vertices == pytest.approx(plain.vertices, abs=1e-6)
+    assert rotated.vertices != pytest.approx(plain.vertices, abs=1e-3)
+    assert restored.geometry_hash == plain.geometry_hash
+    assert restored.geometry_hash != rotated.geometry_hash

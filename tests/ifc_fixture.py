@@ -22,7 +22,8 @@ def _box(x, y, z, dx, dy, dz):
 
 
 def build_synthetic_ifc(
-    path, wall_height_mm=3000.0, second_wall_guid=None, include_window=True
+    path, wall_height_mm=3000.0, second_wall_guid=None, include_window=True, terrain=False,
+    site_rotation_deg=0.0,
 ):
     import ifcopenshell
     import ifcopenshell.api
@@ -85,6 +86,14 @@ def build_synthetic_ifc(
                 [(_box(1000, 0, 900, 1200, 100, 1200), glass)])
     if second_wall_guid:
         product("IfcWall", DUP_ID, second_wall_guid, [(_box(0, 5000, 0, 1000, 300, 3000), brick)])
+    if terrain:
+        # Archicad merges all Mesh elements into the IfcSite, which has no Tag.
+        ground = mesh_rep(*_box(-5000, -5000, -600, 20000, 20000, 300))
+        item = ground.Items[0]
+        ifcopenshell.api.run("style.assign_item_style", f, item=item, style=plaster)
+        ifcopenshell.api.run(
+            "geometry.assign_representation", f, product=site, representation=ground
+        )
     # Things the reader must skip or exclude. (IfcSpace has no Tag attribute in IFC4;
     # Archicad zones come out untagged, too.)
     space = ifcopenshell.api.run("root.create_entity", f, ifc_class="IfcSpace", name="ZONE-0001")
@@ -92,5 +101,20 @@ def build_synthetic_ifc(
     ifcopenshell.api.run("geometry.assign_representation", f, product=space, representation=rep)
     untagged = product("IfcWall", "WALL-9999", None, [(_box(9000, 0, 0, 100, 100, 100), brick)])
     untagged.Tag = None
+    if site_rotation_deg:
+        # Like Archicad: Project North is baked into the IfcSite placement and every element
+        # is placed relative to it, while raw coordinates stay in model coordinates.
+        import math
+
+        import numpy as np
+
+        a = math.radians(site_rotation_deg)
+        rot = np.eye(4)
+        rot[0][0], rot[0][1] = math.cos(a), -math.sin(a)
+        rot[1][0], rot[1][1] = math.sin(a), math.cos(a)
+        ifcopenshell.api.run("geometry.edit_object_placement", f, product=site, matrix=rot)
+        for el in f.by_type("IfcElement"):
+            if el.ObjectPlacement is not None:
+                el.ObjectPlacement.PlacementRelTo = site.ObjectPlacement
     f.write(str(path))
     return str(path)

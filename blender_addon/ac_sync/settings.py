@@ -75,8 +75,21 @@ class ACSyncSettings(PropertyGroup):
         name="Offset", description="Shift the whole model (metres)", subtype="TRANSLATION",
         unit="LENGTH", default=(0.0, 0.0, 0.0),
     )
+    archicad_coordinates: BoolProperty(
+        name="Archicad coordinates",
+        description=(
+            "Undo the Project North rotation Archicad bakes into IFC, so the model sits where it "
+            "does in Archicad. Turn off to keep IFC world coordinates"
+        ),
+        default=True,
+    )
     skip_spaces: BoolProperty(name="Skip zones", default=True)
     skip_openings: BoolProperty(name="Skip opening voids", default=True)
+    skip_site: BoolProperty(
+        name="Skip terrain",
+        description="Archicad Mesh elements arrive merged as one 'Site' object",
+        default=False,
+    )
     keep_ifc: BoolProperty(
         name="Keep IFC file", description="Do not delete the temporary IFC export", default=False
     )

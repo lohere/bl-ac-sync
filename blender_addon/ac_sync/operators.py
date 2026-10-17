@@ -87,6 +87,8 @@ def _excluded_types(params: dict) -> set[str]:
         excluded.add("IfcSpace")
     if params["skip_openings"]:
         excluded.add("IfcOpeningElement")
+    if params["skip_site"]:
+        excluded.add("IfcSite")
     return excluded
 
 
@@ -123,7 +125,11 @@ def _run_job(job: Job) -> None:
                 raise AcSyncError("Choose an IFC file first.")
             job.project = os.path.basename(ifc_path)
         _stage["text"] = "Reading geometry..."
-        job.model = read_ifc(ifc_path, excluded_types=_excluded_types(p))
+        job.model = read_ifc(
+            ifc_path,
+            excluded_types=_excluded_types(p),
+            archicad_coordinates=p["archicad_coordinates"],
+        )
     except Exception as exc:  # reported to the user on the main thread
         job.error = exc
     finally:
@@ -145,6 +151,8 @@ def _snapshot(settings) -> dict:
         "scope": settings.scope,
         "skip_spaces": settings.skip_spaces,
         "skip_openings": settings.skip_openings,
+        "skip_site": settings.skip_site,
+        "archicad_coordinates": settings.archicad_coordinates,
         "keep_ifc": settings.keep_ifc,
     }
 

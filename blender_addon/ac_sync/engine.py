@@ -50,6 +50,8 @@ TYPE_COLLECTIONS = {
     "IfcStairFlight": "Stairs",
     "IfcRailing": "Railings",
     "IfcCovering": "Coverings",
+    "IfcSite": "Terrain",
+    "IfcSpace": "Zones",
     "IfcBuildingElementProxy": "Objects",
     "IfcFurnishingElement": "Objects",
     "IfcDistributionFlowElement": "Objects",

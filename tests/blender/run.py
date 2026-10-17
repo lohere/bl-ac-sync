@@ -69,6 +69,8 @@ def build_fixtures():
     build_synthetic_ifc(os.path.join(FIXTURES, "b.ifc"), wall_height_mm=3500.0)
     build_synthetic_ifc(os.path.join(FIXTURES, "nowin.ifc"), include_window=False)
     build_synthetic_ifc(os.path.join(FIXTURES, "dup.ifc"), second_wall_guid=OTHER_GUID)
+    build_synthetic_ifc(os.path.join(FIXTURES, "terrain.ifc"), terrain=True)
+    build_synthetic_ifc(os.path.join(FIXTURES, "rot.ifc"), site_rotation_deg=23.0)
 
 
 def main():

@@ -89,10 +89,12 @@ class ACSYNC_PT_output(_Base, Panel):
         col = self.layout.column()
         col.prop(s, "root_collection")
         col.prop(s, "removed_policy", text="Removed")
+        col.prop(s, "archicad_coordinates")
         col.prop(s, "offset")
         col.separator()
         col.prop(s, "skip_spaces")
         col.prop(s, "skip_openings")
+        col.prop(s, "skip_site")
 
 
 class ACSYNC_PT_materials(_Base, Panel):

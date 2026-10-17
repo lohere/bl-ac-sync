@@ -87,7 +87,10 @@ added later on top of the same core.
   a vertex/face hash-keyed UV carry-over or generated box projection is the likely fix.
 - Face-level user edits (sculpting, loop cuts) on a synced mesh are replaced on update; only
   object-level work (modifiers, materials, parenting, properties) survives.
-- The N-panel layout has only been checked for registration, not visually.
+- Elements Archicad does not export (e.g. not flagged for collision detection) are silently
+  missing. A count comparison with Archicad would reveal this (idea, not built).
+- Wall/opening geometry has not been compared visually with Archicad (see RESEARCH.md section 6).
+- Archicad Mesh elements arrive merged as a single "Site" object.
 
 ## Open questions
 

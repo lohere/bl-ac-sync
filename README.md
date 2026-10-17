@@ -5,7 +5,8 @@
 Update an Archicad model in Blender with one click, without exporting files by hand and
 without losing the materials, collections and hand edits you made in Blender.
 
-**Status: early prototype / research phase.** Nothing here is usable yet. See
+**Status: working prototype.** The core, the Blender add-on (N-panel: sync, dry run, material
+mapping) and the tests exist; it is not released yet. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the design and
 [`docs/RESEARCH.md`](docs/RESEARCH.md) for the measurements behind it.
 
@@ -47,6 +48,20 @@ Archicad ──(Tapir JSON API, localhost)──► IFC export (automatic, temp 
 | `docs/` | Architecture, research notes |
 | `tools/research/` | Throwaway scripts used for the research measurements |
 | `reference/` | The original FBX-based scripts this project replaces (kept for reference only) |
+
+## Development
+
+```bash
+python -m venv .venv && .venv/Scripts/pip install -e ".[dev]"
+.venv/Scripts/python -m pytest                      # core tests (no Blender needed)
+.venv/Scripts/python tests/blender/run.py           # add-on tests inside headless Blender
+.venv/Scripts/python tools/build_extension.py       # builds dist/ac_sync-<version>.zip
+```
+
+Optional environment variables: `ACSYNC_TEST_IFC` (a real Archicad IFC4 Reference View export,
+enables the real-model tests), `ACSYNC_LIVE_ARCHICAD=1` (enables the live-Archicad test),
+`ACSYNC_BLENDER` (path to `blender.exe`). Install the zip in Blender via
+Preferences > Get Extensions > Install from Disk.
 
 ## License
 

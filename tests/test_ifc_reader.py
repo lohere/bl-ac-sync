@@ -1,5 +1,5 @@
 import pytest
-from conftest import DUP_ID, SLAB_GUID, WALL_GUID, WINDOW_GUID, build_synthetic_ifc
+from ifc_fixture import DUP_ID, SLAB_GUID, WALL_GUID, WINDOW_GUID, build_synthetic_ifc
 
 from acsync import IfcReadError, read_ifc
 

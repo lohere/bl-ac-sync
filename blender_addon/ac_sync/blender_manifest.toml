@@ -1,0 +1,23 @@
+schema_version = "1.0.0"
+
+id = "ac_sync"
+version = "0.0.1"
+name = "AC Sync"
+tagline = "Update Archicad geometry in Blender without losing your work"
+maintainer = "Drotár Bence"
+type = "add-on"
+
+website = "https://github.com/"
+
+blender_version_min = "4.2.0"
+
+# Placeholder: the project license is not decided yet. Blender add-ons that use bpy are
+# normally released under a GPL-compatible license; revisit before publishing.
+license = ["SPDX:GPL-3.0-or-later"]
+
+# Wheels are added by tools/build_extension.py (ifcopenshell for the target platform).
+platforms = ["windows-x64"]
+
+[permissions]
+network = "Talks to Archicad (Tapir add-on) on localhost"
+files = "Writes a temporary IFC export and reads it"

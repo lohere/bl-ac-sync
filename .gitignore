@@ -29,3 +29,8 @@ blender_addon/ac_sync/wheels/*.whl
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local dev data and build output
+.dev/
+build/
+dist/

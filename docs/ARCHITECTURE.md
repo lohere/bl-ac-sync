@@ -66,6 +66,29 @@ added later on top of the same core.
 | Core without `bpy` | Testable, reusable for a CLI |
 | Blender extension with bundled wheels | Easy install for non-programmers (ifcopenshell cp313 win wheel is 41 MB) |
 
+## Implementation notes (prototype)
+
+- Sync runs in a background thread (Tapir export + IFC read); the scene is changed on the
+  main thread in one undo step. `blocking=True` on the operator runs it synchronously
+  (scripts, tests). Esc cancels, but Archicad may still finish an export that was started.
+- Each object remembers which material slot stands for which Archicad surface
+  (`acsync_slots`). New surfaces append a slot; slots the user re-assigned are never
+  overwritten. "Apply material mapping" only switches materials the tool created itself.
+- A changed model offset is treated as a geometry change for every object.
+- Removed elements: move to `<root> - Removed` (default), hide, report only, or delete.
+  A removed element that comes back is restored.
+- The core is vendored into the extension (`_vendor/acsync`) and ifcopenshell ships as a wheel
+  listed in the manifest, so Blender installs everything itself. Verified by installing the built
+  zip into a clean Blender profile.
+
+## Known gaps
+
+- **No UVs.** IFC carries none, so textured materials need UVs generated or made by hand;
+  a vertex/face hash-keyed UV carry-over or generated box projection is the likely fix.
+- Face-level user edits (sculpting, loop cuts) on a synced mesh are replaced on update; only
+  object-level work (modifiers, materials, parenting, properties) survives.
+- The N-panel layout has only been checked for registration, not visually.
+
 ## Open questions
 
 - Origin/units alignment (IFC survey point vs. project origin) and a setting for it.

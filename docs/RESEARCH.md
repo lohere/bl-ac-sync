@@ -143,6 +143,7 @@ time (6.3 s with vs 6.4 s without).
 
 ## 8. Reproducing
 
-`tools/research/*.py` are the scripts used (run with a Python that has `ifcopenshell`
-installed, pass IFC paths as arguments). Exports were made with
-`ifc_ifc_file_operation {method: save, translatorName: ..., elementsToExport: EntireProject}`.
+The throwaway scripts used for these measurements were removed from the repository to keep it
+small; every number above is recorded here. Exports were made with Tapir's
+`ifc_ifc_file_operation {method: save, translatorName: ..., elementsToExport: EntireProject}` and
+read with ifcopenshell (`acsync.read_ifc` reproduces the reader results).

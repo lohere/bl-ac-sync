@@ -1,7 +1,6 @@
 import pytest
-from ifc_fixture import DUP_ID, SLAB_GUID, WALL_GUID, WINDOW_GUID, build_synthetic_ifc
-
 from acsync import IfcReadError, read_ifc
+from ifc_fixture import DUP_ID, SLAB_GUID, WALL_GUID, WINDOW_GUID, build_synthetic_ifc
 
 
 def test_elements_are_keyed_by_archicad_guid(synthetic_ifc):

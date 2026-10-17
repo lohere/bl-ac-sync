@@ -128,13 +128,6 @@ def test_find_instances_scans_all_ports_and_keeps_order(fake_archicad):
         second.close()
 
 
-def test_probe_instance(fake_archicad):
-    from acsync.tapir import probe_instance
-
-    assert probe_instance(fake_archicad.port).project_name == "test"
-    assert probe_instance(1, timeout=0.3) is None
-
-
 @pytest.mark.skipif(not os.environ.get("ACSYNC_LIVE_ARCHICAD"), reason="needs a running Archicad")
 def test_live_archicad():
     instances = find_instances()

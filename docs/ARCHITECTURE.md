@@ -92,15 +92,15 @@ added later on top of the same core.
   update replaces the UV map (also any UV map the user added).
 - Face-level user edits (sculpting, loop cuts) on a synced mesh are replaced on update; only
   object-level work (modifiers, materials, parenting, properties) survives.
-- Elements Archicad does not export (e.g. not flagged for collision detection) are silently
-  missing. A count comparison with Archicad would reveal this (idea, not built).
+- Archicad's IFC export can silently leave elements out (hidden layers, geometry-less elements,
+  materials without the collision-detection flag). The completeness check lists them after every
+  Archicad sync; it cannot say *why* for elements that are visible in Archicad.
 - Wall/opening geometry has not been compared visually with Archicad (see RESEARCH.md section 6).
 - Archicad Mesh elements arrive merged as a single "Site" object.
 
 ## Open questions
 
-- Origin/units alignment (IFC survey point vs. project origin) and a setting for it.
 - Trigger: button first; notification-driven auto-sync later.
 - How to handle stairs, railings, morphs, hotlinked modules (untested).
 - macOS/Linux support (Tapir has a macOS build; ifcopenshell wheels exist) – untested.
-- Name and license.
+- Final name (AC Sync is a working title).

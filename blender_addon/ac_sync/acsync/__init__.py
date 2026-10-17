@@ -20,7 +20,7 @@ from .ifc_reader import (
     SurfaceStyle,
     read_ifc,
 )
-from .materials import MaterialMap, strip_blender_suffix
+from .materials import MaterialMap
 from .tapir import (
     DEFAULT_SCOPE,
     DEFAULT_TRANSLATOR,
@@ -69,5 +69,4 @@ __all__ = [
     "inspect_port",
     "read_ifc",
     "scan_ports",
-    "strip_blender_suffix",
 ]

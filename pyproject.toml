@@ -28,7 +28,6 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
-extend-exclude = ["reference", "tools/research"]
 
 [tool.ruff.lint]
 # Normal in Blender add-ons: class-level bl_options sets, catch-all handlers that report to the user.

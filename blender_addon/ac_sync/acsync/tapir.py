@@ -294,13 +294,6 @@ def inspect_port(
     return PortStatus(port, "ok", info=info)
 
 
-def probe_instance(
-    port: int = DEFAULT_PORT, host: str = DEFAULT_HOST, timeout: float = 0.6
-) -> ArchicadInfo | None:
-    """Ask one port whether an Archicad with Tapir answers there. ``None`` if not."""
-    return inspect_port(port, host, timeout).info
-
-
 def scan_ports(
     host: str = DEFAULT_HOST, ports: Iterable[int] = PORT_RANGE, timeout: float = 0.6
 ) -> list[PortStatus]:

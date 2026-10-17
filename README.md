@@ -178,8 +178,7 @@ python -m venv .venv && .venv/Scripts/pip install -e ".[dev]"
 | `blender_addon/ac_sync/` | The Blender extension: operators, panel, settings |
 | `blender_addon/ac_sync/acsync/` | Its Blender-independent core (no `bpy`), exposed to pip/pytest as `acsync` |
 | `tests/` | Unit tests and headless Blender tests |
-| `tools/` | Build script, research scripts |
-| `reference/` | The original FBX-based scripts this project replaces |
+| `tools/` | Build and release scripts |
 
 Optional environment variables for the tests: `ACSYNC_TEST_IFC` (a real Archicad IFC4 Reference View
 export), `ACSYNC_LIVE_ARCHICAD=1` (tests against a running Archicad), `ACSYNC_BLENDER` (path to

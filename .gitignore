@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# Blender
+*.blend1
+*.blend2
+*.blend@
+
+# Test data from real projects (client/course models are not part of the repo)
+*.ifc
+*.fbx
+*.pln
+*.bpn
+!tests/fixtures/*.ifc
+
+# Bundled wheels are fetched by the build script, not committed
+blender_addon/ac_sync/wheels/*.whl
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

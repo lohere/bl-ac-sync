@@ -71,7 +71,26 @@ Open points: how `EntireProject` vs. visible-only affects results; `IfcSpace` (z
 were not present in sufficient numbers to judge; model origin / "IFC Model position"
 setting still to check against Blender.
 
-## 5. Reproducing
+## 5. Mesh format and the core pipeline (measured, 2026-10-17)
+
+- ifcopenshell's default triangulates everything (101.6k triangles for the test model).
+  `triangulation-type = POLYHEDRON_WITHOUT_HOLES` keeps quads and n-gons: **49.9k faces**
+  (31.9k quads, ~14k triangles where a face has a hole, the rest n-gons). The core uses this
+  mode so Blender gets clean wireframes. `POLYHEDRON_WITH_HOLES` would need hole support
+  that Blender meshes do not have.
+- With `use-world-coords`, vertices are already in **metres** whatever the project unit
+  (mm here). No conversion needed.
+- `geometry.material_ids` gives one material per face. `material.instance_id()` resolves to the
+  `IfcSurfaceStyle`, whose `Name` is the Archicad surface name. `material.diffuse` and
+  `.transparency` give colour/alpha (glass: 0.69).
+- Tapir wire format: official commands as `{"command": "API.X"}`, Tapir commands through
+  `API.ExecuteAddOnCommand` with namespace `TapirCommand`. `TapirCommand.GetProjectInfo`
+  returns the project name and path. Responses are UTF-8.
+- End-to-end timing on the sandbox model (visible elements, IFC4 Reference View): export 2.0 s
+  (4.1 MB), read 7.3 s, 429 elements, 37.7k faces, 18 surfaces.
+- IFC4 `IfcSpace` has no `Tag`; Archicad zones come out untagged and are excluded anyway.
+
+## 6. Reproducing
 
 `tools/research/*.py` are the scripts used (run with a Python that has `ifcopenshell`
 installed, pass IFC paths as arguments). Exports were made with

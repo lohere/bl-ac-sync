@@ -75,6 +75,8 @@ class ACSYNC_PT_main(_Base, Panel):
             _lines(box, s.last_summary)
             if s.last_check:
                 _lines(box, s.last_check, icon="CHECKMARK" if s.last_check_ok else "ERROR")
+                if operators.last_completeness and operators.last_completeness.unexplained:
+                    box.operator("acsync.select_missing", icon="RESTRICT_SELECT_OFF")
             box.operator("acsync.copy_report", icon="COPYDOWN")
             if bpy.data.texts.get(operators.REPORT_TEXT_NAME):
                 _lines(box, "Full report: Text Editor, 'AC Sync Report'")

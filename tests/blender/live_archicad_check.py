@@ -34,6 +34,8 @@ print("dry run:", bpy.ops.acsync.sync("EXEC_DEFAULT", dry_run=True, blocking=Tru
 print("sync:", bpy.ops.acsync.sync("EXEC_DEFAULT", blocking=True), "|", s.last_summary)
 print("completeness:", repr(s.last_check), "| ok:", s.last_check_ok)
 print(bpy.data.texts["AC Sync Report"].as_string())
+print("select missing:", bpy.ops.acsync.select_missing("EXEC_DEFAULT"))
+print("selected in Archicad:", len(ac_sync.acsync.TapirClient(s.last_port).get_selection()))
 print("objects:", len(ac_sync.engine.managed_objects(s.root_collection)))
 print("again:", bpy.ops.acsync.sync("EXEC_DEFAULT", blocking=True), "|", s.last_summary)
 tmp = os.path.join(os.environ.get("TEMP", "."), "acsync")

@@ -43,6 +43,7 @@ IFC Translators), start from Reference View and keep the schema on IFC4.
 
 After each Archicad sync, AC Sync compares the GUIDs of all 3D elements in Archicad with the
 GUIDs in the IFC. It names what is missing and, for hidden ones, which filter hides them. For
-elements that are visible but still missing it does **not** guess a cause. On the test model,
-for example, a handful of walls were skipped by Archicad with no visible reason; the collision
-flag was ruled out. Meshes (merged), zones and openings are not compared.
+elements that are visible but still missing it does **not** guess a cause; use **Select in
+Archicad** (panel button) to see them. On the test model, 9 such walls/doors turned out to have no
+geometry in Archicad's 3D window at all, so skipping them was correct (the collision flag was ruled
+out). Meshes (merged), zones and openings are not compared.

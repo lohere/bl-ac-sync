@@ -122,6 +122,14 @@ setting still to check against Blender.
   (Design Transfer) still misses WALL-0224, WALL-0086 and DOOR-0017. Cause unknown (candidates:
   tiny or degenerate geometry such as the 0.17 m stub WALL-0086, elements trimmed away by Solid
   Element Operations, door hosted in a missing wall). The tool reports them but does not guess.
+- **Resolved (user check in Archicad):** those 9 elements show **no geometry even when isolated**
+  with "show selection only". Archicad's IFC export is right to skip them; the API's visibility
+  filters (layer, renovation, structure display) all say "visible" for them, so a missing element
+  can be geometry-less without any filter explaining it. Likely (unverified): walls fully covered
+  by overlapping walls of higher priority, or removed by Solid Element Operations.
+- **Do not use `IsVisibleIn3D`:** it reflects the 3D window's current display state. With "show
+  selection only" on, it returned exactly the selected elements (9 of 233 walls). The check
+  uses layer / renovation / structure-display filters only.
 - Built: completeness check (`acsync.completeness`) comparing Archicad's element GUIDs per type
   with the IFC; it also asks Archicad which visibility filter hides each missing element.
 - Earlier idea: a completeness check comparing Archicad's element counts per type (Tapir

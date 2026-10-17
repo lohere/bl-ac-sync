@@ -109,11 +109,12 @@ class Completeness:
         unexplained = [m for m in self.missing if not m.reasons]
         if unexplained:
             out.append(
-                f"{len(unexplained)} are visible in Archicad but Archicad's IFC export skipped "
-                "them anyway. Cause not known. Things to check: 'Participates in Collision "
-                "Detection' on the element's Building Material, very small or degenerate "
-                "geometry, elements fully trimmed by Solid Element Operations, and the "
-                "translator's filters."
+                f"{len(unexplained)} are not hidden by any Archicad filter but were not exported. "
+                "Cause not known. Select them in Archicad and look: if they show no geometry in "
+                "the 3D window, Archicad has nothing to export (for example walls completely "
+                "covered by overlapping walls, or removed by Solid Element Operations). If they "
+                "do show geometry, check 'Participates in Collision Detection' on their Building "
+                "Material and the translator's filters."
             )
         shown = self.missing[:12]
         out.append(

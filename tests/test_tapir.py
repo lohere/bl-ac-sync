@@ -1,7 +1,6 @@
 import os
 
 import pytest
-
 from acsync import (
     CommandNotAvailableError,
     ModalDialogOpenError,
@@ -143,3 +142,27 @@ def test_live_archicad():
     client = TapirClient(instances[0].port)
     assert client.require_tapir_version().tapir_ok
     assert "IFC4 Reference View-based Export" in client.list_ifc_translators()
+
+
+def test_select_elements_replaces_selection_and_reports_result(fake_archicad):
+    state = {"selected": ["OLD1", "OLD2"], "calls": []}
+
+    def get_selected(params):
+        return fake_archicad.ok({"elements": [{"elementId": {"guid": g}} for g in state["selected"]]})
+
+    def change(params):
+        state["calls"].append(params)
+        for item in params.get("removeElementsFromSelection") or []:
+            state["selected"].remove(item["elementId"]["guid"])
+        for item in params.get("addElementsToSelection") or []:
+            state["selected"].append(item["elementId"]["guid"])
+        return fake_archicad.ok({})
+
+    fake_archicad.handlers["GetSelectedElements"] = get_selected
+    fake_archicad.handlers["ChangeSelectionOfElements"] = change
+    client = client_for(fake_archicad)
+    assert client.select_elements(["a", "b", "a"]) == 2  # duplicates ignored
+    assert state["selected"] == ["a", "b"]
+    assert "removeElementsFromSelection" in state["calls"][0]
+    assert client.select_elements(["c"], replace=False) == 1
+    assert state["selected"] == ["a", "b", "c"]

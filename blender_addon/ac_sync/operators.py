@@ -42,6 +42,7 @@ class ConnectionState:
 
 
 connection = ConnectionState()
+last_completeness: Completeness | None = None  # result of the last Archicad sync (not saved)
 _busy = threading.Event()
 _stage = {"text": ""}
 
@@ -265,6 +266,8 @@ class ACSYNC_OT_sync(Operator):
         if job.note:
             report.warnings.insert(0, job.note)
         check = job.completeness
+        global last_completeness
+        last_completeness = check
         settings.last_check = check.summary() if check and check.checked else ""
         settings.last_check_ok = bool(check is None or not check.checked or check.ok)
         if check is not None and check.checked and check.missing:
@@ -373,6 +376,33 @@ class ACSYNC_OT_refresh(Operator):
         return {"FINISHED"}
 
 
+class ACSYNC_OT_select_missing(Operator):
+    bl_idname = "acsync.select_missing"
+    bl_label = "Select in Archicad"
+    bl_description = (
+        "Select, in Archicad, the elements that are visible there but were not exported, "
+        "so you can see which they are (only the selection changes, not the model)"
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return last_completeness is not None and bool(last_completeness.unexplained)
+
+    def execute(self, context):
+        settings = context.scene.acsync
+        guids = [m.guid for m in last_completeness.unexplained]
+        try:
+            client = TapirClient(settings.port or settings.last_port or DEFAULT_PORT, timeout=15)
+            selected = client.select_elements(guids)
+        except AcSyncError as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+        self.report(
+            {"INFO"}, f"Selected {selected} of {len(guids)} elements in Archicad (F5 shows 3D)."
+        )
+        return {"FINISHED"}
+
+
 class ACSYNC_OT_apply_material_map(Operator):
     bl_idname = "acsync.apply_material_map"
     bl_label = "Apply material mapping"
@@ -410,6 +440,7 @@ CLASSES = (
     ACSYNC_OT_refresh,
     ACSYNC_OT_apply_material_map,
     ACSYNC_OT_copy_report,
+    ACSYNC_OT_select_missing,
 )
 
 

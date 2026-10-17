@@ -178,6 +178,33 @@ class TapirClient:
             )
         return info
 
+    def get_selection(self) -> list[str]:
+        """GUIDs of the elements currently selected in Archicad."""
+        response = self.addon("GetSelectedElements")
+        return [e["elementId"]["guid"] for e in response.get("elements", [])]
+
+    def select_elements(self, guids: Iterable[str], replace: bool = True) -> int:
+        """Select elements in Archicad (a UI selection, the model is not changed).
+
+        With ``replace`` the current selection is cleared first. Returns how many of the
+        requested elements are selected afterwards.
+        """
+        wanted = list(dict.fromkeys(guids))
+        if replace:
+            current = self.get_selection()
+            if current:
+                self.addon(
+                    "ChangeSelectionOfElements",
+                    {"removeElementsFromSelection": [{"elementId": {"guid": g}} for g in current]},
+                )
+        if wanted:
+            self.addon(
+                "ChangeSelectionOfElements",
+                {"addElementsToSelection": [{"elementId": {"guid": g}} for g in wanted]},
+            )
+        selected = {g.upper() for g in self.get_selection()}
+        return sum(1 for g in wanted if g.upper() in selected)
+
     def list_ifc_translators(self) -> list[str]:
         response = self.addon("GetIFCExportTranslators")
         return [t["name"] for t in response.get("translators", [])]

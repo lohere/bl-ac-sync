@@ -1,17 +1,22 @@
-"""Build the installable Blender extension (a .zip) into ``dist/``.
+"""Build the installable Blender extension (a .zip).
 
     python tools/build_extension.py [--blender PATH] [--python-version 3.13]
+                                    [--version X.Y.Z] [--output-dir DIR]
 
 Steps: stage ``blender_addon/ac_sync`` (which contains the ``acsync`` core as a sub-package)
 in ``build/``, download the ifcopenshell wheel for the target Blender Python into ``wheels/``
 (listed in the manifest, so Blender installs it with the extension), then let Blender
 validate and pack it (``blender --command extension build``).
 
+``--version`` overrides the version in the *staged* manifest only (handy to test updates);
+the source manifest is never touched.
+
 Windows x64 only for now (the manifest lists the platform; extend ``PLATFORMS`` for more).
 """
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -22,12 +27,41 @@ BUILD = os.path.join(ROOT, "build", "ac_sync")
 DIST = os.path.join(ROOT, "dist")
 DEFAULT_BLENDER = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
 PLATFORMS = {"windows-x64": "win_amd64"}
+_VERSION_LINE = re.compile(r'^version\s*=\s*"[^"]*"\s*$', re.MULTILINE)
 
 
-def stage():
+def find_blender(explicit=None):
+    exe = explicit or os.environ.get("ACSYNC_BLENDER") or (
+        DEFAULT_BLENDER if os.path.isfile(DEFAULT_BLENDER) else shutil.which("blender"))
+    if not exe:
+        sys.exit("Blender not found: pass --blender PATH or set ACSYNC_BLENDER.")
+    return exe
+
+
+def stage(version=None):
     if os.path.isdir(BUILD):
         shutil.rmtree(BUILD)
     shutil.copytree(ADDON, BUILD, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "wheels"))
+    if version:
+        manifest = os.path.join(BUILD, "blender_manifest.toml")
+        with open(manifest, encoding="utf-8") as fh:
+            text = fh.read()
+        text, count = _VERSION_LINE.subn(f'version = "{version}"', text, count=1)
+        if count != 1:
+            sys.exit("Could not find the version line in blender_manifest.toml")
+        with open(manifest, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+    write_build_info()
+
+
+def write_build_info():
+    """Stamp the manifest version into the package so the running add-on can show it."""
+    manifest = os.path.join(BUILD, "blender_manifest.toml")
+    with open(manifest, encoding="utf-8") as fh:
+        found = _VERSION_LINE.search(fh.read())
+    version = re.search(r'"([^"]*)"', found.group(0)).group(1)
+    with open(os.path.join(BUILD, "_build_info.py"), "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(f'"""Written by tools/build_extension.py."""\n\nVERSION = "{version}"\n')
 
 
 def fetch_wheels(python_version):
@@ -52,26 +86,35 @@ def fetch_wheels(python_version):
     return names
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--blender", default=os.environ.get("ACSYNC_BLENDER") or (
-        DEFAULT_BLENDER if os.path.isfile(DEFAULT_BLENDER) else shutil.which("blender")))
-    parser.add_argument("--python-version", default="3.13",
-                        help="Python version of the target Blender (5.x ships 3.13)")
-    args = parser.parse_args()
-    if not args.blender:
-        sys.exit("Blender not found: pass --blender PATH or set ACSYNC_BLENDER.")
-
-    stage()
-    wheels = fetch_wheels(args.python_version)
+def build(blender=None, python_version="3.13", version=None, output_dir=DIST):
+    """Build the extension zip and return its path."""
+    blender = find_blender(blender)
+    stage(version)
+    wheels = fetch_wheels(python_version)
     print("wheels:", ", ".join(wheels))
-    os.makedirs(DIST, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
+    before = set(os.listdir(output_dir))
     subprocess.run(
-        [args.blender, "--command", "extension", "build",
-         "--source-dir", BUILD, "--output-dir", DIST],
+        [blender, "--command", "extension", "build",
+         "--source-dir", BUILD, "--output-dir", output_dir],
         check=True,
     )
-    print("built:", ", ".join(os.listdir(DIST)))
+    created = sorted(set(os.listdir(output_dir)) - before) or sorted(
+        f for f in os.listdir(output_dir) if f.endswith(".zip"))
+    path = os.path.join(output_dir, created[-1])
+    print("built:", path)
+    return path
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--blender")
+    parser.add_argument("--python-version", default="3.13",
+                        help="Python version of the target Blender (5.x ships 3.13)")
+    parser.add_argument("--version", help="override the version in the staged manifest")
+    parser.add_argument("--output-dir", default=DIST)
+    args = parser.parse_args()
+    build(args.blender, args.python_version, args.version, args.output_dir)
 
 
 if __name__ == "__main__":

@@ -9,7 +9,9 @@ type = "add-on"
 
 website = "https://github.com/"
 
-blender_version_min = "4.2.0"
+# The bundled ifcopenshell wheel is for Python 3.13, which ships with Blender 5.0 and newer.
+# (Blender 4.2-4.5 use Python 3.11; supporting them needs a second wheel and testing.)
+blender_version_min = "5.0.0"
 
 # Placeholder: the project license is not decided yet. Blender add-ons that use bpy are
 # normally released under a GPL-compatible license; revisit before publishing.

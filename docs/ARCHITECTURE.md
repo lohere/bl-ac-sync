@@ -6,7 +6,7 @@ without scripting, and that never destroys the user's Blender work.
 ## Components
 
 ```
-┌──────────── Archicad 29 ────────────┐        ┌──────────────── Blender ≥ 4.2 ────────────────┐
+┌──────────── Archicad 29 ────────────┐        ┌──────────────── Blender ≥ 5.0 ────────────────┐
 │ Tapir add-on (JSON on :19723)       │        │ Extension "AC Sync" (N-panel + preferences)    │
 └───────────────▲─────────────────────┘        │   operators ──► acsync core (bundled)          │
                 │ HTTP/JSON                    │                   ├ tapir client               │

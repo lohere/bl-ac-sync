@@ -3,7 +3,7 @@
 import bpy
 from bpy.types import Panel, UIList
 
-from . import operators
+from . import __version__, operators
 
 
 class ACSYNC_UL_surfaces(UIList):
@@ -138,6 +138,8 @@ class ACSYNC_PT_advanced(_Base, Panel):
         col.prop(s, "port")
         col.prop(s, "check_completeness")
         col.prop(s, "keep_ifc")
+        col.separator()
+        col.label(text=f"AC Sync {__version__}")
 
 
 def _lines(layout, text: str, icon: str = "NONE") -> None:

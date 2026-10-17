@@ -32,7 +32,7 @@ It is free and open source.
 |---|---|
 | **Archicad 29** | Older versions are untested. The project must be open while you sync. |
 | **Tapir** (free Archicad add-on) | Lets other programs talk to Archicad. Version **1.7.1 or newer**. See below. |
-| **Blender 4.2 or newer** | Developed on Blender 5.2 LTS. |
+| **Blender 5.0 or newer** | Developed and tested on Blender 5.2 LTS. Older versions are not supported. |
 | **Windows** | macOS has not been tested yet. |
 
 Everything else (the IFC reader) is included in the add-on. You do not install anything else.
@@ -57,6 +57,14 @@ Everything else (the IFC reader) is included in the add-on. You do not install a
 3. Restart Blender if it asks you to.
 
 You will now find an **AC Sync** tab in the 3D viewport sidebar (press **N**).
+
+---
+
+## Updating
+
+When a new version is published, Blender shows an **Update** button next to AC Sync in
+**Preferences > Get Extensions** (once you have added the project's extension repository there; see
+[`docs/RELEASING.md`](docs/RELEASING.md)). After updating, **restart Blender**.
 
 ---
 

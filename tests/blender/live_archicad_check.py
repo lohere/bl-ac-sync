@@ -15,8 +15,7 @@ sys.path.insert(0, os.path.join(ROOT, "blender_addon"))
 
 import ac_sync
 import bpy
-
-from acsync import find_instances
+from ac_sync.acsync import find_instances
 
 ac_sync.register()
 want = os.environ.get("ACSYNC_LIVE_PROJECT", "sandbox").lower()

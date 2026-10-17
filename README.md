@@ -45,8 +45,8 @@ Archicad ──(Tapir JSON API, localhost)──► IFC export (automatic, temp 
 
 | Path | Purpose |
 |---|---|
-| `src/acsync/` | Blender-independent core: Tapir client, IFC reader, diff/matching, material mapping |
-| `blender_addon/ac_sync/` | The Blender extension: operators, panel, preferences |
+| `blender_addon/ac_sync/` | The Blender extension: operators, panel, settings |
+| `blender_addon/ac_sync/acsync/` | Its Blender-independent core (no `bpy`): Tapir client, IFC reader, diff/matching, material mapping, completeness check. Exposed to pip/pytest as the package `acsync` |
 | `tests/` | Unit tests for the core |
 | `docs/` | Architecture, research notes |
 | `tools/research/` | Throwaway scripts used for the research measurements |

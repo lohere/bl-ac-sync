@@ -15,8 +15,13 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5"]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+packages = ["acsync"]
+
+[tool.setuptools.package-dir]
+# The core lives inside the Blender add-on package (Blender only allows an extension to ship
+# modules inside its own package) and is exposed to pip/pytest as the top-level `acsync`.
+acsync = "blender_addon/ac_sync/acsync"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

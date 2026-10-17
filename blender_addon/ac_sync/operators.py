@@ -12,7 +12,8 @@ import bpy
 from bpy.props import BoolProperty
 from bpy.types import Operator
 
-from acsync import (
+from . import engine
+from .acsync import (
     DEFAULT_EXCLUDED_TYPES,
     AcSyncError,
     Completeness,
@@ -22,9 +23,7 @@ from acsync import (
     find_instances,
     read_ifc,
 )
-from acsync.tapir import DEFAULT_PORT
-
-from . import engine
+from .acsync.tapir import DEFAULT_PORT
 
 REPORT_TEXT_NAME = "AC Sync Report"
 
@@ -268,8 +267,10 @@ class ACSYNC_OT_sync(Operator):
         check = job.completeness
         settings.last_check = check.summary() if check and check.checked else ""
         settings.last_check_ok = bool(check is None or not check.checked or check.ok)
-        if check is not None and not check.ok:
-            report.warnings.extend(check.lines())
+        if check is not None and check.checked and check.missing:
+            # Unexpected gaps are warnings; hidden-in-Archicad ones are only information.
+            target = report.warnings if not check.ok else report.lines
+            target.extend(check.lines())
         _store_report(settings, report, job.project)
         self.report({"INFO"}, ("Dry run: " if self.dry_run else "Sync done: ") + report.diff_summary)
         return {"FINISHED"}

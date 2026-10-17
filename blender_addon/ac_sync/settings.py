@@ -11,7 +11,7 @@ from bpy.props import (
 )
 from bpy.types import PropertyGroup
 
-from acsync import DEFAULT_SCOPE, DEFAULT_TRANSLATOR, MaterialMap
+from .acsync import DEFAULT_SCOPE, DEFAULT_TRANSLATOR, MaterialMap
 
 REMOVED_POLICIES = [
     ("MOVE", "Move to 'Removed' collection", "Keep the object, but file it away (safest)"),

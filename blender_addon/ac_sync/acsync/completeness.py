@@ -59,8 +59,19 @@ class Completeness:
     missing_by_type: dict[str, int] = field(default_factory=dict)
 
     @property
+    def unexplained(self) -> list[MissingElement]:
+        """Missing although visible in Archicad: the ones worth a warning."""
+        return [m for m in self.missing if not m.reasons]
+
+    @property
+    def hidden(self) -> list[MissingElement]:
+        """Missing because Archicad itself hides them (hidden layer, Renovation filter, ...)."""
+        return [m for m in self.missing if m.reasons]
+
+    @property
     def ok(self) -> bool:
-        return self.checked and not self.missing
+        """True when nothing unexpected is missing (hidden elements are expected to be absent)."""
+        return self.checked and not self.unexplained
 
     def summary(self) -> str:
         """One line for the panel."""
@@ -68,7 +79,18 @@ class Completeness:
             return ""
         if not self.missing:
             return f"All {self.expected} Archicad elements arrived."
-        return f"{len(self.missing)} of {self.expected} Archicad elements did NOT arrive."
+        if not self.unexplained:
+            return (
+                f"{len(self.hidden)} hidden element(s) in Archicad were not exported (expected); "
+                "everything visible arrived."
+            )
+        text = (
+            f"{len(self.unexplained)} visible element(s) in Archicad were NOT exported by "
+            f"Archicad's IFC export."
+        )
+        if self.hidden:
+            text += f" ({len(self.hidden)} hidden ones are also absent, as expected.)"
+        return text
 
     def lines(self) -> list[str]:
         """Detailed lines for the report."""
@@ -77,7 +99,7 @@ class Completeness:
         if not self.missing:
             return [self.summary()]
         by_type = ", ".join(f"{n} {t}" for t, n in sorted(self.missing_by_type.items()))
-        out = [f"{self.summary()} ({by_type})"]
+        out = [f"{self.summary()} Missing in total: {len(self.missing)} of {self.expected} ({by_type})."]
         layers = Counter(m.layer for m in self.missing if m.layer)
         if layers:
             out.append("Layers: " + ", ".join(f"{name} ({n})" for name, n in layers.most_common()))

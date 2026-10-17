@@ -1,5 +1,4 @@
 import pytest
-
 from acsync import IfcModel, TapirClient, check_completeness
 from acsync.ifc_reader import Element
 
@@ -75,6 +74,8 @@ def test_missing_elements_are_named_with_layer_and_reason(fake_archicad):
     assert result.missing_by_type == {"Wall": 2, "Object": 1}
     text = "\n".join(result.lines())
     assert "3 of 5" in text and "S2 New" in text and "Cause not known" in text
+    assert len(result.unexplained) == 1 and len(result.hidden) == 2
+    assert "1 visible element(s)" in result.summary() and "2 hidden" in result.summary()
 
 
 def test_guid_matching_ignores_case(fake_archicad):
@@ -99,3 +100,9 @@ def test_archicad_errors_do_not_raise(fake_archicad):
     model = IfcModel(path="x", schema="IFC4", elements={})
     result = check_completeness(TapirClient(fake_archicad.port, timeout=5), model, "EntireProject")
     assert not result.checked and "failed" in result.note
+
+
+def test_only_hidden_elements_missing_is_not_a_warning(fake_archicad):
+    result = run(fake_archicad, ["W1", "W2", "D1"])  # only W3 and O1 absent: both on a hidden layer
+    assert result.ok and len(result.missing) == 2
+    assert "expected" in result.summary() and "everything visible arrived" in result.summary()

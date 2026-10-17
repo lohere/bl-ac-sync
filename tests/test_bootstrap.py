@@ -1,6 +1,7 @@
 import importlib.util
 import os
 import sys
+import types
 
 
 def load_bootstrap():
@@ -11,50 +12,35 @@ def load_bootstrap():
     return module
 
 
-def make_core(root, marker):
-    package = root / "acsync"
-    package.mkdir(parents=True)
-    (package / "__init__.py").write_text(f"MARKER = {marker!r}\n")
-    (package / "sub.py").write_text("X = 1\n")
-    return str(root)
+def fake_modules(monkeypatch, names):
+    for name in names:
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
 
 
-def forget_acsync(monkeypatch=None):
-    for name in [n for n in sys.modules if n == "acsync" or n.startswith("acsync.")]:
-        if monkeypatch is not None:
-            monkeypatch.delitem(sys.modules, name)
-        else:
-            del sys.modules[name]
-
-
-def test_stale_vendored_core_is_dropped_and_reimported_fresh(tmp_path, monkeypatch):
+def test_purge_drops_stale_submodules_and_keeps_the_rest(monkeypatch):
     bootstrap = load_bootstrap()
-    vendor = tmp_path / "ext" / "_vendor"
-    make_core(vendor, "old")
-    monkeypatch.syspath_prepend(str(vendor))
-    forget_acsync(monkeypatch)
-    import acsync.sub
-
-    import acsync  # the old vendored core, as loaded earlier in a Blender session
-
-    assert acsync.MARKER == "old"
-
-    (vendor / "acsync" / "__init__.py").write_text("MARKER = 'new'\n")  # the reinstall
-    assert bootstrap.purge_stale_core(str(vendor)) is True
-    assert "acsync" not in sys.modules and "acsync.sub" not in sys.modules
-    import acsync as fresh
-
-    assert fresh.MARKER == "new"
-    forget_acsync()
+    pkg = "bl_ext.test.ac_sync"
+    fake_modules(monkeypatch, [
+        pkg, f"{pkg}._bootstrap", f"{pkg}.operators", f"{pkg}.acsync",
+        f"{pkg}.acsync.tapir", "bl_ext.test.other_ext.operators", "acsync",
+    ])
+    dropped = bootstrap.purge_submodules(pkg)
+    assert dropped == 3
+    assert pkg in sys.modules and f"{pkg}._bootstrap" in sys.modules
+    assert f"{pkg}.operators" not in sys.modules
+    assert f"{pkg}.acsync" not in sys.modules and f"{pkg}.acsync.tapir" not in sys.modules
+    assert "bl_ext.test.other_ext.operators" in sys.modules and "acsync" in sys.modules
 
 
-def test_core_from_elsewhere_is_left_alone(tmp_path, monkeypatch):
+def test_purge_is_a_noop_on_first_import(monkeypatch):
     bootstrap = load_bootstrap()
-    elsewhere = make_core(tmp_path / "checkout" / "src", "dev")
-    monkeypatch.syspath_prepend(elsewhere)
-    forget_acsync(monkeypatch)
-    import acsync
+    fake_modules(monkeypatch, ["bl_ext.fresh.ac_sync"])
+    assert bootstrap.purge_submodules("bl_ext.fresh.ac_sync") == 0
 
-    assert bootstrap.purge_stale_core(str(tmp_path / "ext" / "_vendor")) is False
-    assert sys.modules["acsync"] is acsync
-    forget_acsync()
+
+def test_extra_paths(monkeypatch, tmp_path):
+    bootstrap = load_bootstrap()
+    monkeypatch.setenv("ACSYNC_EXTRA_PATHS", os.pathsep.join([str(tmp_path), ""]))
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    bootstrap.add_extra_paths()
+    assert sys.path[0] == str(tmp_path)

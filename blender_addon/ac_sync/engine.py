@@ -23,8 +23,8 @@ from dataclasses import dataclass, field
 
 import bpy
 
-from acsync import Diff, MaterialMap, SceneRecord, compute_diff
-from acsync.ifc_reader import Element, IfcModel, SurfaceStyle
+from .acsync import Diff, MaterialMap, SceneRecord, compute_diff
+from .acsync.ifc_reader import Element, IfcModel, SurfaceStyle
 
 PROP_ROOT = "acsync_root"
 PROP_GUID = "acsync_guid"

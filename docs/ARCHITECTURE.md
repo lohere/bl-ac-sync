@@ -17,7 +17,9 @@ without scripting, and that never destroys the user's Blender work.
                                                └────────────────────────────────────────────────┘
 ```
 
-1. **`src/acsync` (core, no `bpy`)** – everything that can be tested without Blender.
+1. **`blender_addon/ac_sync/acsync` (core, no `bpy`)** – everything that can be tested without
+   Blender. It is a sub-package of the add-on (Blender's extension policy only allows modules
+   inside the extension's own package) and is exposed to pip/pytest as the top-level `acsync`.
    - `tapir`: tiny HTTP client (`urllib`, no dependencies): identity check, translator list,
      IFC export, error handling (modal-dialog error 4001, version check).
    - `ifc_reader`: IFC → `Element` records `{guid, element_id, type, name, vertices,
@@ -77,9 +79,9 @@ added later on top of the same core.
 - A changed model offset is treated as a geometry change for every object.
 - Removed elements: move to `<root> - Removed` (default), hide, report only, or delete.
   A removed element that comes back is restored.
-- The core is vendored into the extension (`_vendor/acsync`) and ifcopenshell ships as a wheel
-  listed in the manifest, so Blender installs everything itself. Verified by installing the built
-  zip into a clean Blender profile.
+- The core is a sub-package of the extension and ifcopenshell ships as a wheel listed in the
+  manifest, so Blender installs everything itself. Verified by installing the built zip into a clean
+  Blender profile; Blender's extension checker reports no policy violations.
 
 ## Known gaps
 

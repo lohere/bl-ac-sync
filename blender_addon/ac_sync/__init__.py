@@ -2,7 +2,8 @@
 
 from . import _bootstrap
 
-_bootstrap.ensure_core_importable()
+_bootstrap.add_extra_paths()
+_bootstrap.purge_submodules(__name__)  # reinstall/reload in a running Blender: no stale code
 
 from . import operators, settings, ui
 

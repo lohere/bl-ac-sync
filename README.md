@@ -34,6 +34,9 @@ Archicad ──(Tapir JSON API, localhost)──► IFC export (automatic, temp 
 
 ## Requirements (planned)
 
+> **New to this?** Read [`docs/ARCHICAD_SETUP.md`](docs/ARCHICAD_SETUP.md) first: it explains the Archicad-side settings that decide what arrives in Blender.
+
+
 - Archicad 29 (earlier versions untested) with Tapir ≥ 1.7.1 installed
 - Blender ≥ 4.2 (developed on 5.2 LTS)
 - Windows (macOS untested)

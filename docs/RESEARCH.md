@@ -114,7 +114,17 @@ setting still to check against Blender.
   about 365 x 340 m. Fix: duplicate the "IFC4 Reference View-based Export" translator in Archicad,
   edit its Model Filter and turn that option off. Elements that are not flagged for collision
   detection (Tags and Categories panel) are silently missing otherwise.
-- Idea: a completeness check comparing Archicad's element counts per type (Tapir
+- **Correction (same day):** the collision-detection flag explains the two context meshes but
+  not every missing element. A completeness check on the sandbox model found 16 elements
+  missing at "Entire project": 7 on a hidden layer (hidden furniture) and 9 visible ones (8 Basic
+  walls on the structure layers plus a door). Their building materials all have
+  `collisionDetection: true` (read via Tapir), and a translator with the option Off
+  (Design Transfer) still misses WALL-0224, WALL-0086 and DOOR-0017. Cause unknown (candidates:
+  tiny or degenerate geometry such as the 0.17 m stub WALL-0086, elements trimmed away by Solid
+  Element Operations, door hosted in a missing wall). The tool reports them but does not guess.
+- Built: completeness check (`acsync.completeness`) comparing Archicad's element GUIDs per type
+  with the IFC; it also asks Archicad which visibility filter hides each missing element.
+- Earlier idea: a completeness check comparing Archicad's element counts per type (Tapir
   `GetElementsByType`) with what the IFC contained, to report silent omissions.
 
 ## 7. Reproducing

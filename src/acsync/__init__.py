@@ -1,5 +1,6 @@
 """AC-Blender Sync core: Archicad (Tapir) -> IFC -> mesh data, independent of Blender."""
 
+from .completeness import Completeness, MissingElement, check_completeness
 from .diff import Change, Diff, SceneRecord, compute_diff
 from .errors import (
     AcSyncError,
@@ -37,11 +38,13 @@ __all__ = [
     "ArchicadInfo",
     "Change",
     "CommandNotAvailableError",
+    "Completeness",
     "Diff",
     "Element",
     "IfcModel",
     "IfcReadError",
     "MaterialMap",
+    "MissingElement",
     "ModalDialogOpenError",
     "SceneRecord",
     "Skipped",
@@ -50,6 +53,7 @@ __all__ = [
     "TapirCommandError",
     "TapirConnectionError",
     "TapirVersionError",
+    "check_completeness",
     "compute_diff",
     "find_instances",
     "read_ifc",

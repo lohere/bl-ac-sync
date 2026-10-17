@@ -116,14 +116,18 @@ class TapirClient:
         timeout: float | None = None,
     ) -> dict:
         """Run a Tapir add-on command and return its ``addOnCommandResponse``."""
-        result = self.request(
-            "API.ExecuteAddOnCommand",
-            {
-                "addOnCommandId": {"commandNamespace": namespace, "commandName": name},
-                "addOnCommandParameters": parameters or {},
-            },
-            timeout=timeout,
-        )
+        try:
+            result = self.request(
+                "API.ExecuteAddOnCommand",
+                {
+                    "addOnCommandId": {"commandNamespace": namespace, "commandName": name},
+                    "addOnCommandParameters": parameters or {},
+                },
+                timeout=timeout,
+            )
+        except CommandNotAvailableError as exc:
+            self._raise({"code": exc.code, "message": str(exc)}, name)  # name the real command
+            raise
         response = result.get("addOnCommandResponse") or {}
         # Some add-on commands report their own failure inside the response.
         if set(response) == {"error"} and isinstance(response["error"], dict):

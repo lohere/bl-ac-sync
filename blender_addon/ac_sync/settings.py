@@ -90,6 +90,12 @@ class ACSyncSettings(PropertyGroup):
         description="Archicad Mesh elements arrive merged as one 'Site' object",
         default=False,
     )
+    check_completeness: BoolProperty(
+        name="Check completeness",
+        description="After an Archicad sync, list elements that exist in Archicad but did not "
+        "arrive in the IFC, and why",
+        default=True,
+    )
     keep_ifc: BoolProperty(
         name="Keep IFC file", description="Do not delete the temporary IFC export", default=False
     )
@@ -103,6 +109,8 @@ class ACSyncSettings(PropertyGroup):
     surfaces_index: IntProperty()
 
     last_summary: StringProperty(default="")
+    last_check: StringProperty(default="")  # completeness summary line
+    last_check_ok: BoolProperty(default=True)
 
     def material_map(self) -> MaterialMap:
         mapping = {row.name: row.blender_material for row in self.surfaces if row.blender_material}

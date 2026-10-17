@@ -73,6 +73,8 @@ class ACSYNC_PT_main(_Base, Panel):
             box = layout.box()
             box.label(text="Last result", icon="TEXT")
             _lines(box, s.last_summary)
+            if s.last_check:
+                _lines(box, s.last_check, icon="CHECKMARK" if s.last_check_ok else "ERROR")
             box.operator("acsync.copy_report", icon="COPYDOWN")
             if bpy.data.texts.get(operators.REPORT_TEXT_NAME):
                 _lines(box, "Full report: Text Editor, 'AC Sync Report'")
@@ -127,6 +129,7 @@ class ACSYNC_PT_advanced(_Base, Panel):
         s = context.scene.acsync
         col = self.layout.column()
         col.prop(s, "port")
+        col.prop(s, "check_completeness")
         col.prop(s, "keep_ifc")
 
 

@@ -15,8 +15,10 @@ from bpy.types import Operator
 from acsync import (
     DEFAULT_EXCLUDED_TYPES,
     AcSyncError,
+    Completeness,
     IfcModel,
     TapirClient,
+    check_completeness,
     find_instances,
     read_ifc,
 )
@@ -100,6 +102,7 @@ class Job:
     note: str = ""
     project: str = ""
     port: int = 0  # where Archicad was found, remembered in the scene settings
+    completeness: Completeness | None = None
     done: bool = False
 
 
@@ -130,6 +133,9 @@ def _run_job(job: Job) -> None:
             excluded_types=_excluded_types(p),
             archicad_coordinates=p["archicad_coordinates"],
         )
+        if p["source"] == "ARCHICAD" and p["check_completeness"]:
+            _stage["text"] = "Checking completeness..."
+            job.completeness = check_completeness(client, job.model, p["scope"])
     except Exception as exc:  # reported to the user on the main thread
         job.error = exc
     finally:
@@ -153,6 +159,7 @@ def _snapshot(settings) -> dict:
         "skip_openings": settings.skip_openings,
         "skip_site": settings.skip_site,
         "archicad_coordinates": settings.archicad_coordinates,
+        "check_completeness": settings.check_completeness,
         "keep_ifc": settings.keep_ifc,
     }
 
@@ -258,6 +265,11 @@ class ACSYNC_OT_sync(Operator):
             return {"CANCELLED"}
         if job.note:
             report.warnings.insert(0, job.note)
+        check = job.completeness
+        settings.last_check = check.summary() if check and check.checked else ""
+        settings.last_check_ok = bool(check is None or not check.checked or check.ok)
+        if check is not None and not check.ok:
+            report.warnings.extend(check.lines())
         _store_report(settings, report, job.project)
         self.report({"INFO"}, ("Dry run: " if self.dry_run else "Sync done: ") + report.diff_summary)
         return {"FINISHED"}

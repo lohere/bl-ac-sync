@@ -25,17 +25,41 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 ADDON = os.path.join(ROOT, "blender_addon", "ac_sync")
 BUILD = os.path.join(ROOT, "build", "ac_sync")
 DIST = os.path.join(ROOT, "dist")
-DEFAULT_BLENDER = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
 PLATFORMS = {"windows-x64": "win_amd64"}
 _VERSION_LINE = re.compile(r'^version\s*=\s*"[^"]*"\s*$', re.MULTILINE)
 
 
+LOCAL_BLENDER_FILE = os.path.join(ROOT, ".dev", "blender.txt")  # git-ignored, one line: a path
+
+
+def _blender_candidates(explicit):
+    yield explicit
+    yield os.environ.get("ACSYNC_BLENDER")
+    if os.path.isfile(LOCAL_BLENDER_FILE):
+        with open(LOCAL_BLENDER_FILE, encoding="utf-8") as fh:
+            yield fh.readline().strip()
+    yield shutil.which("blender")
+    # the usual Windows install locations, newest version first
+    for env_name in ("ProgramFiles", "ProgramFiles(x86)"):
+        base = os.environ.get(env_name)
+        if not base:
+            continue
+        foundation = os.path.join(base, "Blender Foundation")
+        if os.path.isdir(foundation):
+            for name in sorted(os.listdir(foundation), reverse=True):
+                yield os.path.join(foundation, name, "blender.exe")
+        yield os.path.join(base, "Steam", "steamapps", "common", "Blender", "blender.exe")
+
+
 def find_blender(explicit=None):
-    exe = explicit or os.environ.get("ACSYNC_BLENDER") or (
-        DEFAULT_BLENDER if os.path.isfile(DEFAULT_BLENDER) else shutil.which("blender"))
-    if not exe:
-        sys.exit("Blender not found: pass --blender PATH or set ACSYNC_BLENDER.")
-    return exe
+    """Path of blender.exe: --blender, $ACSYNC_BLENDER, .dev/blender.txt, PATH, usual installs."""
+    for candidate in _blender_candidates(explicit):
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    sys.exit(
+        "Blender not found. Pass --blender PATH, set the ACSYNC_BLENDER environment variable, "
+        "or write the path of blender.exe into .dev/blender.txt"
+    )
 
 
 def stage(version=None):

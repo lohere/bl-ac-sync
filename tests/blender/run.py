@@ -5,12 +5,11 @@
    once with pip; Blender's own Python version is asked from Blender itself),
 3. runs Blender headless on ``run_addon_tests.py``.
 
-Environment: ACSYNC_BLENDER (path to blender.exe, default: the Steam install or PATH),
+Environment: ACSYNC_BLENDER or .dev/blender.txt (path to blender.exe; see tools/build_extension.py),
 ACSYNC_TEST_IFC (optional real Archicad export for the real-model test).
 """
 
 import os
-import shutil
 import subprocess
 import sys
 import zipfile
@@ -18,22 +17,18 @@ import zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
+sys.path.insert(0, os.path.join(ROOT, "tools"))
 
+import build_extension
 from ifc_fixture import build_synthetic_ifc
 
-DEFAULT_BLENDER = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
 SITE = os.path.join(ROOT, ".dev", "site")
 FIXTURES = os.path.join(ROOT, ".dev", "fixtures")
 OTHER_GUID = "EEEEEEEE-0000-4000-8000-000000000005"
 
 
 def blender_exe():
-    exe = os.environ.get("ACSYNC_BLENDER") or (
-        DEFAULT_BLENDER if os.path.isfile(DEFAULT_BLENDER) else shutil.which("blender")
-    )
-    if not exe:
-        sys.exit("Blender not found. Set ACSYNC_BLENDER to the path of blender.exe.")
-    return exe
+    return build_extension.find_blender()
 
 
 def blender_python_tag(exe):

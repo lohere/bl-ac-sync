@@ -20,8 +20,9 @@ from .acsync import (
     IfcModel,
     TapirClient,
     check_completeness,
-    find_instances,
+    discovery_error,
     read_ifc,
+    scan_ports,
 )
 from .acsync.tapir import DEFAULT_PORT
 
@@ -68,14 +69,13 @@ def _pick_client(port: int, hint: int = 0) -> tuple[TapirClient, str]:
     if port:
         return TapirClient(port), ""
     quick = [p for p in dict.fromkeys([hint, DEFAULT_PORT]) if p]
-    found = find_instances(ports=quick)  # known ports: ~0.03 s when Archicad is there
+    statuses = scan_ports(ports=quick)  # known ports: ~0.03 s when Archicad is there
+    found = [s.info for s in statuses if s.info is not None]
     if not found:
-        found = find_instances()  # parallel scan of the whole range (~0.6 s)
+        statuses = scan_ports()  # parallel scan of the whole range (~0.6 s)
+        found = [s.info for s in statuses if s.info is not None]
     if not found:
-        raise AcSyncError(
-            "No Archicad found. Start Archicad, open the project and make sure the Tapir "
-            "add-on is installed (or switch the source to an IFC file)."
-        )
+        raise discovery_error(statuses)  # says whether Archicad, Tapir or a dialog is the problem
     note = ""
     if len(found) > 1:
         names = ", ".join(f"{i.project_name} (port {i.port})" for i in found)
@@ -359,7 +359,7 @@ class ACSYNC_OT_refresh(Operator):
             connection.ok = False
             connection.message = str(check.error)
             connection.instances = []
-            self.report({"WARNING"}, str(check.error))
+            self.report({"ERROR"}, str(check.error))
             return {"CANCELLED"}
         info = check.info
         settings.last_port = check.found_port

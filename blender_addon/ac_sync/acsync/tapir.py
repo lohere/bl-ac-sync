@@ -18,10 +18,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from .errors import (
+    AcSyncError,
     CommandNotAvailableError,
     ModalDialogOpenError,
     TapirCommandError,
     TapirConnectionError,
+    TapirNotInstalledError,
     TapirVersionError,
 )
 
@@ -29,6 +31,7 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 19723
 PORT_RANGE = range(19723, 19744)  # Archicad tries consecutive ports for multiple instances
 MIN_TAPIR_VERSION = (1, 7, 1)  # first version with named IFC translators
+TAPIR_RELEASES_URL = "https://github.com/ENZYME-APD/tapir-archicad-automation/releases"
 DEFAULT_TRANSLATOR = "IFC4 Reference View-based Export"
 DEFAULT_SCOPE = "VisibleElementsOnAllStories"
 EXPORT_SCOPES = (
@@ -168,7 +171,10 @@ class TapirClient:
         )
 
     def require_tapir_version(self) -> ArchicadInfo:
-        info = self.info()
+        try:
+            info = self.info()
+        except CommandNotAvailableError as exc:
+            raise TapirNotInstalledError(_tapir_missing_message(self.port)) from exc
         if not info.tapir_ok:
             raise TapirVersionError(
                 f"Tapir {info.tapir_version} is installed, but "
@@ -245,32 +251,93 @@ class TapirClient:
         return path
 
 
+def _tapir_missing_message(port: int | None = None) -> str:
+    where = f" (port {port})" if port else ""
+    return (
+        f"Archicad is running{where}, but the Tapir add-on is not installed or not loaded. "
+        f"Install Tapir {'.'.join(map(str, MIN_TAPIR_VERSION))} or newer from "
+        f"{TAPIR_RELEASES_URL} and restart Archicad."
+    )
+
+
+@dataclass(frozen=True)
+class PortStatus:
+    """What answers on one port. ``state`` is one of:
+
+    ``ok`` (Archicad with a working Tapir), ``no_tapir`` (Archicad, but no Tapir add-on),
+    ``dialog_open`` (Archicad is blocked by an open dialog), ``error`` (something else went
+    wrong) or ``unreachable`` (nothing there).
+    """
+
+    port: int
+    state: str
+    info: ArchicadInfo | None = None
+    detail: str = ""
+
+
+def inspect_port(
+    port: int = DEFAULT_PORT, host: str = DEFAULT_HOST, timeout: float = 0.6
+) -> PortStatus:
+    """Find out what, if anything, answers on one port."""
+    try:
+        TapirClient(port, host, timeout=timeout).request("API.GetProductInfo")
+    except (TapirConnectionError, TapirCommandError) as exc:
+        return PortStatus(port, "unreachable", detail=str(exc))
+    try:
+        info = TapirClient(port, host, timeout=max(timeout, 5.0)).info()
+    except CommandNotAvailableError as exc:
+        return PortStatus(port, "no_tapir", detail=str(exc))
+    except ModalDialogOpenError as exc:
+        return PortStatus(port, "dialog_open", detail=str(exc))
+    except (TapirConnectionError, TapirCommandError) as exc:
+        return PortStatus(port, "error", detail=str(exc))
+    return PortStatus(port, "ok", info=info)
+
+
 def probe_instance(
     port: int = DEFAULT_PORT, host: str = DEFAULT_HOST, timeout: float = 0.6
 ) -> ArchicadInfo | None:
     """Ask one port whether an Archicad with Tapir answers there. ``None`` if not."""
-    try:
-        TapirClient(port, host, timeout=timeout).request("API.GetProductInfo")
-    except (TapirConnectionError, TapirCommandError):
-        return None
-    try:
-        return TapirClient(port, host, timeout=max(timeout, 5.0)).info()
-    except (TapirConnectionError, TapirCommandError):
-        return None  # Archicad is up but Tapir is missing, or a dialog is open
+    return inspect_port(port, host, timeout).info
 
 
-def find_instances(
+def scan_ports(
     host: str = DEFAULT_HOST, ports: Iterable[int] = PORT_RANGE, timeout: float = 0.6
-) -> list[ArchicadInfo]:
-    """Scan the Archicad port range for running instances that answer to Tapir.
+) -> list[PortStatus]:
+    """Inspect several ports at once (in parallel, in the order given).
 
-    Closed ports on Windows do not refuse the connection, they time out, so the ports are
-    probed in parallel: the whole scan costs one timeout (~0.6 s) instead of one per port.
-    For the usual single instance, ``probe_instance()`` on the default port is instant.
+    Closed ports on Windows do not refuse the connection, they time out, so probing them one
+    after another costs a timeout each. In parallel the whole scan costs one (~0.6 s).
     """
     port_list = list(ports)
     if not port_list:
         return []
     with ThreadPoolExecutor(max_workers=len(port_list)) as pool:
-        results = list(pool.map(lambda p: probe_instance(p, host, timeout), port_list))
-    return [info for info in results if info is not None]
+        return list(pool.map(lambda p: inspect_port(p, host, timeout), port_list))
+
+
+def find_instances(
+    host: str = DEFAULT_HOST, ports: Iterable[int] = PORT_RANGE, timeout: float = 0.6
+) -> list[ArchicadInfo]:
+    """Archicad instances with a working Tapir on the given ports (default: all of them)."""
+    return [s.info for s in scan_ports(host, ports, timeout) if s.info is not None]
+
+
+def discovery_error(statuses: Iterable[PortStatus]) -> AcSyncError:
+    """The error to show when no usable Archicad was found, saying *why* as precisely as possible."""
+    statuses = list(statuses)
+    missing = next((s for s in statuses if s.state == "no_tapir"), None)
+    if missing is not None:
+        return TapirNotInstalledError(_tapir_missing_message(missing.port))
+    blocked = next((s for s in statuses if s.state == "dialog_open"), None)
+    if blocked is not None:
+        return ModalDialogOpenError(
+            "A dialog is open in Archicad. Close it and try again.", 4001, None
+        )
+    other = next((s for s in statuses if s.state == "error"), None)
+    if other is not None:
+        return TapirCommandError(f"Archicad answered with an error: {other.detail}")
+    return AcSyncError(
+        "No Archicad found. Start Archicad and open your project "
+        "(or switch the source to an IFC file)."
+    )

@@ -9,6 +9,7 @@ from .errors import (
     ModalDialogOpenError,
     TapirCommandError,
     TapirConnectionError,
+    TapirNotInstalledError,
     TapirVersionError,
 )
 from .ifc_reader import (
@@ -24,8 +25,12 @@ from .tapir import (
     DEFAULT_SCOPE,
     DEFAULT_TRANSLATOR,
     ArchicadInfo,
+    PortStatus,
     TapirClient,
+    discovery_error,
     find_instances,
+    inspect_port,
+    scan_ports,
 )
 from .uv import box_projection_uvs
 
@@ -47,17 +52,22 @@ __all__ = [
     "MaterialMap",
     "MissingElement",
     "ModalDialogOpenError",
+    "PortStatus",
     "SceneRecord",
     "Skipped",
     "SurfaceStyle",
     "TapirClient",
     "TapirCommandError",
     "TapirConnectionError",
+    "TapirNotInstalledError",
     "TapirVersionError",
     "box_projection_uvs",
     "check_completeness",
     "compute_diff",
+    "discovery_error",
     "find_instances",
+    "inspect_port",
     "read_ifc",
+    "scan_ports",
     "strip_blender_suffix",
 ]

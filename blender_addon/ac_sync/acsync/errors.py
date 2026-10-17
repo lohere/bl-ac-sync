@@ -32,3 +32,7 @@ class TapirVersionError(AcSyncError):
 
 class IfcReadError(AcSyncError):
     """The IFC file could not be read or contained no usable geometry."""
+
+
+class TapirNotInstalledError(AcSyncError):
+    """Archicad answers, but the Tapir add-on is not installed or not loaded."""

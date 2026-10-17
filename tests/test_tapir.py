@@ -166,3 +166,56 @@ def test_select_elements_replaces_selection_and_reports_result(fake_archicad):
     assert "removeElementsFromSelection" in state["calls"][0]
     assert client.select_elements(["c"], replace=False) == 1
     assert state["selected"] == ["a", "b", "c"]
+
+
+# -- telling the failure cases apart ------------------------------------------------------------
+
+
+def test_archicad_without_tapir_is_reported_as_missing_tapir(fake_archicad):
+    from acsync import TapirNotInstalledError, discovery_error, inspect_port, scan_ports
+
+    fake_archicad.handlers.pop("GetAddOnVersion")  # Archicad answers, Tapir is not loaded
+    status = inspect_port(fake_archicad.port)
+    assert status.state == "no_tapir" and status.info is None
+    error = discovery_error(scan_ports(ports=[1, fake_archicad.port], timeout=0.4))
+    assert isinstance(error, TapirNotInstalledError)
+    text = str(error)
+    assert "not installed" in text and "restart Archicad" in text and "1.7.1" in text
+    assert str(fake_archicad.port) in text and "github.com" in text
+
+
+def test_require_tapir_version_reports_missing_tapir_clearly(fake_archicad):
+    from acsync import TapirNotInstalledError
+
+    fake_archicad.handlers.pop("GetAddOnVersion")
+    with pytest.raises(TapirNotInstalledError, match="not installed"):
+        client_for(fake_archicad).require_tapir_version()
+
+
+def test_open_dialog_is_reported_as_dialog(fake_archicad):
+    from acsync import discovery_error, inspect_port, scan_ports
+
+    fake_archicad.handlers["GetAddOnVersion"] = lambda p: fake_archicad.error(4001, "dialog")
+    assert inspect_port(fake_archicad.port).state == "dialog_open"
+    error = discovery_error(scan_ports(ports=[fake_archicad.port], timeout=0.4))
+    assert isinstance(error, ModalDialogOpenError)
+
+
+def test_nothing_running_says_no_archicad(fake_archicad):
+    from acsync import TapirNotInstalledError, discovery_error, scan_ports
+
+    statuses = scan_ports(ports=[1, 2], timeout=0.3)
+    assert [s.state for s in statuses] == ["unreachable", "unreachable"]
+    error = discovery_error(statuses)
+    assert not isinstance(error, TapirNotInstalledError)
+    assert "No Archicad found" in str(error)
+
+
+def test_old_tapir_still_reports_version_problem(fake_archicad):
+    from acsync import discovery_error, scan_ports
+
+    fake_archicad.handlers["GetAddOnVersion"] = lambda p: fake_archicad.ok({"version": "1.5.9"})
+    statuses = scan_ports(ports=[fake_archicad.port], timeout=0.4)
+    assert statuses[0].state == "ok" and not statuses[0].info.tapir_ok  # found, but too old
+    assert statuses[0].info.tapir_version == "1.5.9"
+    assert discovery_error([]) is not None

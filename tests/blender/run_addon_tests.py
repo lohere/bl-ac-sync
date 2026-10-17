@@ -292,6 +292,54 @@ def test_uvs_are_generated_and_follow_the_settings():
     assert "0 added, 0 geometry changed" in sync(s, ifc("a"))
 
 
+def _fake_archicad_server(addon_error_code=None):
+    """A tiny HTTP server that looks like Archicad, with or without a working Tapir."""
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            if body["command"] == "API.GetProductInfo":
+                answer = {"succeeded": True, "result": {"version": 29, "buildNumber": 1}}
+            elif addon_error_code:
+                answer = {"succeeded": False, "error": {"code": addon_error_code, "message": "x"}}
+            else:
+                answer = {"succeeded": False, "error": {"code": 4010, "message": "x"}}
+            data = json.dumps(answer).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def test_missing_tapir_and_open_dialog_give_clear_errors():
+    for code, expected in ((4010, "Tapir add-on is not installed"), (4001, "dialog is open")):
+        server = _fake_archicad_server(code)
+        try:
+            s = fresh()
+            s.source = "ARCHICAD"
+            s.port = server.server_address[1]  # use exactly this port, as a user could
+            for operator in (bpy.ops.acsync.sync, bpy.ops.acsync.refresh):
+                try:
+                    operator("EXEC_DEFAULT", blocking=True)
+                except RuntimeError as exc:
+                    assert expected in str(exc), (code, str(exc))
+                else:
+                    raise AssertionError(f"expected an error for code {code}")
+            assert not objs()
+        finally:
+            server.shutdown()
+
+
 def test_real_model():
     path = os.environ.get("ACSYNC_TEST_IFC")
     if not path:

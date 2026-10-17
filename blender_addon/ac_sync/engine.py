@@ -31,6 +31,8 @@ PROP_GUID = "acsync_guid"
 PROP_ID = "acsync_id"
 PROP_HASH = "acsync_hash"
 PROP_OFFSET = "acsync_offset"
+PROP_UV = "acsync_uv"
+UV_LAYER_NAME = "AC_Box"
 PROP_SLOTS = "acsync_slots"
 PROP_REMOVED = "acsync_removed"
 
@@ -134,13 +136,22 @@ def managed_objects(root_name: str) -> dict[str, bpy.types.Object]:
     return found
 
 
-def scene_records(objects: dict[str, bpy.types.Object], offset) -> dict[str, SceneRecord]:
+def _uv_key(uv_scale) -> str:
+    return "none" if not uv_scale else f"box:{uv_scale:.4f}"
+
+
+def scene_records(
+    objects: dict[str, bpy.types.Object], offset, uv_scale=None
+) -> dict[str, SceneRecord]:
     key = _offset_key(offset)
+    uv_key = _uv_key(uv_scale)
     records = {}
     for guid, obj in objects.items():
         stored = obj.get(PROP_HASH, "")
         if obj.get(PROP_OFFSET, "") != key:
             stored += "!offset"  # forces an update when the model offset changed
+        if obj.get(PROP_UV, "none") != uv_key:
+            stored += "!uv"  # ... or the UV settings changed
         records[guid] = SceneRecord(guid, obj.get(PROP_ID, ""), stored)
     return records
 
@@ -209,7 +220,9 @@ def _slot_index_for(obj, surface: SurfaceStyle, slots: list[str], mapping, repor
 # -- geometry --------------------------------------------------------------------------------
 
 
-def _write_geometry(obj, element: Element, mapping: MaterialMap, offset, report: Report):
+def _write_geometry(
+    obj, element: Element, mapping: MaterialMap, offset, report: Report, uv_scale=None
+):
     mesh = obj.data
     ox, oy, oz = offset
     v = element.vertices
@@ -233,6 +246,10 @@ def _write_geometry(obj, element: Element, mapping: MaterialMap, offset, report:
                    for m in element.face_materials]
         mesh.polygons.foreach_set("material_index", indices)
     mesh.update()
+    if element.uvs and len(element.uvs) == 2 * len(mesh.loops):
+        uv_layer = mesh.uv_layers.new(name=UV_LAYER_NAME)
+        uv_layer.data.foreach_set("uv", element.uvs)
+    obj[PROP_UV] = _uv_key(uv_scale)
     obj[PROP_SLOTS] = json.dumps(slots)
     obj[PROP_HASH] = element.geometry_hash
     obj[PROP_OFFSET] = _offset_key(offset)
@@ -242,21 +259,21 @@ def _write_geometry(obj, element: Element, mapping: MaterialMap, offset, report:
 # -- apply -----------------------------------------------------------------------------------
 
 
-def _create_object(element, root, mapping, offset, report):
+def _create_object(element, root, mapping, offset, report, uv_scale=None):
     mesh = bpy.data.meshes.new(element.element_id or element.guid)
     obj = bpy.data.objects.new(element.element_id or element.guid, mesh)
     obj[PROP_ROOT] = root.name
     obj[PROP_GUID] = element.guid
     obj["acsync_type"] = element.ifc_type
     type_collection(root, element.ifc_type).objects.link(obj)
-    _write_geometry(obj, element, mapping, offset, report)
+    _write_geometry(obj, element, mapping, offset, report, uv_scale)
     return obj
 
 
-def _update_object(change, obj, root, mapping, offset, report):
+def _update_object(change, obj, root, mapping, offset, report, uv_scale=None):
     element = change.element
     if change.geometry_changed:
-        _write_geometry(obj, element, mapping, offset, report)
+        _write_geometry(obj, element, mapping, offset, report, uv_scale)
     if change.label_changed:
         old_label = obj.get(PROP_ID, "")
         obj[PROP_ID] = element.element_id
@@ -304,7 +321,7 @@ def _handle_removed(record, obj, policy, root, report):
 
 def plan(scene, settings, model: IfcModel) -> tuple[Diff, dict[str, bpy.types.Object]]:
     objects = managed_objects(settings.root_collection)
-    records = scene_records(objects, tuple(settings.offset))
+    records = scene_records(objects, tuple(settings.offset), model.uv_scale)
     return compute_diff(model.elements, records), objects
 
 
@@ -331,12 +348,13 @@ def apply_model(scene, settings, model: IfcModel, dry_run: bool = False) -> Repo
     mapping = settings.material_map()
     offset = tuple(settings.offset)
 
+    uv_scale = model.uv_scale
     for element in diff.added:
-        _create_object(element, root, mapping, offset, report)
+        _create_object(element, root, mapping, offset, report, uv_scale)
     for change in diff.changed:
         obj = objects[change.element.guid]
         _restore_if_removed(obj, change.element, root)
-        _update_object(change, obj, root, mapping, offset, report)
+        _update_object(change, obj, root, mapping, offset, report, uv_scale)
     for element in diff.unchanged:
         _restore_if_removed(objects[element.guid], element, root)
     for record in removed:

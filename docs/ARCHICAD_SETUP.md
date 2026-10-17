@@ -37,7 +37,7 @@ IFC Translators), start from Reference View and keep the schema on IFC4.
 | Large context meshes missing | The translator option "Export geometries that participate in Collision Detection only" (Geometry Conversion preset) skips elements whose **Building Material** does not have *Participates in Collision Detection* | Tick that flag on the material (Options > Element Attributes > Building Materials), or use a translator with the option off. Turning it off globally also exports air-gap layers of composites as solid bodies |
 | Hidden furniture / MEP not imported | Elements on hidden layers are not exported, even with "Entire project" | Show the layer in Archicad before syncing |
 | Model sits **rotated** against Archicad | Archicad writes Project North into the IFC | AC Sync undoes this by default ("Archicad coordinates" in the Output panel). Turn it off only if you want IFC world coordinates |
-| No texture mapping | IFC carries no UV coordinates | Add UVs in Blender (planned: automatic box projection) |
+| No texture mapping from Archicad | IFC carries no UV coordinates, so Archicad's texture orientation and scale are lost | AC Sync generates its own UVs in real-world scale (Output panel > Generate UVs, "Metres per UV unit"). Set the texture's real size through that scale or the material's mapping node |
 
 ## 5. What the completeness check does and does not tell you
 

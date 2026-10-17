@@ -18,6 +18,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from .errors import IfcReadError
+from .uv import box_projection_uvs
 
 # Types that are not useful as Blender geometry by default.
 DEFAULT_EXCLUDED_TYPES = frozenset({"IfcSpace", "IfcOpeningElement", "IfcAnnotation", "IfcGrid"})
@@ -52,6 +53,7 @@ class Element:
     face_materials: tuple[int, ...]  # per face: index into ``surfaces`` (-1 = none)
     surfaces: tuple[SurfaceStyle, ...]
     geometry_hash: str
+    uvs: tuple[float, ...] = ()  # u,v per face corner (empty when UV generation is off)
 
     @property
     def vertex_count(self) -> int:
@@ -76,6 +78,7 @@ class IfcModel:
     elements: dict[str, Element] = field(default_factory=dict)  # keyed by GUID
     skipped: list[Skipped] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    uv_scale: float | None = None  # metres per UV unit, None = no UVs were generated
 
     def surface_names(self) -> list[str]:
         names = {s.name for e in self.elements.values() for s in e.surfaces}
@@ -138,6 +141,7 @@ def read_ifc(
     excluded_types: Iterable[str] = DEFAULT_EXCLUDED_TYPES,
     threads: int = 4,
     archicad_coordinates: bool = True,
+    uv_scale: float | None = None,
 ) -> IfcModel:
     """Read all geometry-carrying products of an IFC file, keyed by Archicad GUID.
 
@@ -164,6 +168,7 @@ def read_ifc(
     settings.set("triangulation-type", ifcopenshell_wrapper.POLYHEDRON_WITHOUT_HOLES)
 
     to_archicad = _site_to_archicad_matrix(ifc) if archicad_coordinates else None
+    model.uv_scale = uv_scale
 
     exclude_entities = []
     for type_name in excluded:
@@ -196,7 +201,7 @@ def read_ifc(
             )
         else:
             element = _build_element(
-                ifc, entity, shape.geometry, guid, element_id, to_archicad
+                ifc, entity, shape.geometry, guid, element_id, to_archicad, uv_scale
             )
             if element is None:
                 model.skipped.append(Skipped(entity.is_a(), element_id, "empty geometry"))
@@ -211,7 +216,7 @@ def read_ifc(
 
 
 def _build_element(
-    ifc, entity, geometry, guid: str, element_id: str, to_archicad=None
+    ifc, entity, geometry, guid: str, element_id: str, to_archicad=None, uv_scale=None
 ) -> Element | None:
     verts = tuple(float(v) for v in geometry.verts)
     if to_archicad is not None:
@@ -240,6 +245,7 @@ def _build_element(
         face_materials=face_materials,
         surfaces=tuple(surfaces),
         geometry_hash=geometry_hash(verts, face_sizes, face_indices, names_per_face),
+        uvs=box_projection_uvs(verts, face_sizes, face_indices, uv_scale) if uv_scale else (),
     )
 
 

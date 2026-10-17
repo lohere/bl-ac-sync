@@ -27,6 +27,7 @@ from .tapir import (
     TapirClient,
     find_instances,
 )
+from .uv import box_projection_uvs
 
 __version__ = "0.0.1"
 
@@ -53,6 +54,7 @@ __all__ = [
     "TapirCommandError",
     "TapirConnectionError",
     "TapirVersionError",
+    "box_projection_uvs",
     "check_completeness",
     "compute_diff",
     "find_instances",

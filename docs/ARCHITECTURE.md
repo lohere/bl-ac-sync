@@ -85,8 +85,11 @@ added later on top of the same core.
 
 ## Known gaps
 
-- **No UVs.** IFC carries none, so textured materials need UVs generated or made by hand;
-  a vertex/face hash-keyed UV carry-over or generated box projection is the likely fix.
+- **UVs are generated, not Archicad's.** IFC has none, so each face is projected onto its own plane
+  in world metres (walls: horizontal along the face / height; floors and roofs: world X projected
+  onto the plane), which keeps textures at real-world scale and continuous across neighbouring
+  faces and elements. Archicad's per-surface texture orientation is not recoverable. A geometry
+  update replaces the UV map (also any UV map the user added).
 - Face-level user edits (sculpting, loop cuts) on a synced mesh are replaced on update; only
   object-level work (modifiers, materials, parenting, properties) survives.
 - Elements Archicad does not export (e.g. not flagged for collision detection) are silently

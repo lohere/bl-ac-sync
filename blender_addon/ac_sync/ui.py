@@ -96,6 +96,11 @@ class ACSYNC_PT_output(_Base, Panel):
         col.prop(s, "archicad_coordinates")
         col.prop(s, "offset")
         col.separator()
+        col.prop(s, "generate_uvs")
+        sub = col.column()
+        sub.active = s.generate_uvs
+        sub.prop(s, "uv_scale")
+        col.separator()
         col.prop(s, "skip_spaces")
         col.prop(s, "skip_openings")
         col.prop(s, "skip_site")

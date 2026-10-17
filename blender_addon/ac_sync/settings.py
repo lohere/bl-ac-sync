@@ -5,6 +5,7 @@ from bpy.props import (
     BoolProperty,
     CollectionProperty,
     EnumProperty,
+    FloatProperty,
     FloatVectorProperty,
     IntProperty,
     StringProperty,
@@ -82,6 +83,19 @@ class ACSyncSettings(PropertyGroup):
             "does in Archicad. Turn off to keep IFC world coordinates"
         ),
         default=True,
+    )
+    generate_uvs: BoolProperty(
+        name="Generate UVs",
+        description=(
+            "IFC has no texture coordinates. Create box-style UVs in real-world scale so image "
+            "textures work. Replaced on every geometry update"
+        ),
+        default=True,
+    )
+    uv_scale: FloatProperty(
+        name="Metres per UV unit",
+        description="1 = a texture repeats once per metre; larger values make textures bigger",
+        default=1.0, min=0.01, max=1000.0, precision=3,
     )
     skip_spaces: BoolProperty(name="Skip zones", default=True)
     skip_openings: BoolProperty(name="Skip opening voids", default=True)

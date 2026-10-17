@@ -132,6 +132,7 @@ def _run_job(job: Job) -> None:
             ifc_path,
             excluded_types=_excluded_types(p),
             archicad_coordinates=p["archicad_coordinates"],
+            uv_scale=p["uv_scale"],
         )
         if p["source"] == "ARCHICAD" and p["check_completeness"]:
             _stage["text"] = "Checking completeness..."
@@ -159,6 +160,7 @@ def _snapshot(settings) -> dict:
         "skip_openings": settings.skip_openings,
         "skip_site": settings.skip_site,
         "archicad_coordinates": settings.archicad_coordinates,
+        "uv_scale": settings.uv_scale if settings.generate_uvs else None,
         "check_completeness": settings.check_completeness,
         "keep_ifc": settings.keep_ifc,
     }

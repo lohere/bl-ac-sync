@@ -135,7 +135,13 @@ setting still to check against Blender.
 - Earlier idea: a completeness check comparing Archicad's element counts per type (Tapir
   `GetElementsByType`) with what the IFC contained, to report silent omissions.
 
-## 7. Reproducing
+## 7. UVs (measured)
+
+IFC has no UVs, so the core generates them (`acsync.uv.box_projection_uvs`): per-face planar
+projection in world metres. 204k face corners on the sandbox model cost no measurable extra read
+time (6.3 s with vs 6.4 s without).
+
+## 8. Reproducing
 
 `tools/research/*.py` are the scripts used (run with a Python that has `ifcopenshell`
 installed, pass IFC paths as arguments). Exports were made with

@@ -269,6 +269,29 @@ def test_archicad_coordinates_toggle():
     assert any(abs(a - b) > 0.1 for p, r in zip(plain, rotated) for a, b in zip(p, r))
 
 
+def test_uvs_are_generated_and_follow_the_settings():
+    s = fresh()
+    assert s.generate_uvs  # on by default
+    sync(s, ifc("a"))
+    wall = objs()[WALL_GUID]
+    assert [u.name for u in wall.data.uv_layers] == ["AC_Box"]
+    assert len(wall.data.uv_layers[0].data) == len(wall.data.loops)
+    uv_before = [tuple(d.uv) for d in wall.data.uv_layers[0].data]
+    assert max(abs(c) for uv in uv_before for c in uv) > 1.0  # real-world scale, not 0..1
+    assert "0 added, 0 geometry changed" in sync(s, ifc("a"))  # stable
+
+    s.uv_scale = 2.0  # bigger textures: every object is rewritten, UVs halve
+    assert "3 geometry changed" in sync(s, ifc("a"))
+    wall = objs()[WALL_GUID]
+    uv_after = [tuple(d.uv) for d in wall.data.uv_layers[0].data]
+    assert all(abs(a - b / 2) < 1e-4 for p, q in zip(uv_after, uv_before) for a, b in zip(p, q))
+
+    s.generate_uvs = False  # switching off removes the UV map on the next update
+    assert "3 geometry changed" in sync(s, ifc("a"))
+    assert len(objs()[WALL_GUID].data.uv_layers) == 0
+    assert "0 added, 0 geometry changed" in sync(s, ifc("a"))
+
+
 def test_real_model():
     path = os.environ.get("ACSYNC_TEST_IFC")
     if not path:

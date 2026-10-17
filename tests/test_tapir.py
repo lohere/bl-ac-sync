@@ -116,6 +116,26 @@ def test_find_instances(fake_archicad):
     assert [i.port for i in found] == [fake_archicad.port]
 
 
+def test_find_instances_scans_all_ports_and_keeps_order(fake_archicad):
+    from conftest import FakeArchicad
+
+    second = FakeArchicad()
+    try:
+        second.handlers.update(fake_archicad.handlers)
+        ports = sorted([fake_archicad.port, second.port])
+        found = find_instances(ports=[1, *reversed(ports), 2], timeout=0.5)
+        assert [i.port for i in found] == list(reversed(ports))  # order of the ports given
+    finally:
+        second.close()
+
+
+def test_probe_instance(fake_archicad):
+    from acsync.tapir import probe_instance
+
+    assert probe_instance(fake_archicad.port).project_name == "test"
+    assert probe_instance(1, timeout=0.3) is None
+
+
 @pytest.mark.skipif(not os.environ.get("ACSYNC_LIVE_ARCHICAD"), reason="needs a running Archicad")
 def test_live_archicad():
     instances = find_instances()

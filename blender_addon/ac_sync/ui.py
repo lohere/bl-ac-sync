@@ -33,25 +33,28 @@ class ACSYNC_PT_main(_Base, Panel):
         if s.source == "ARCHICAD":
             box = layout.box()
             state = operators.connection
-            row = box.row()
+            row = box.row(align=True)
             if not state.checked:
                 row.label(text="Archicad: not checked", icon="QUESTION")
             elif state.ok:
-                row.label(text=state.message, icon="CHECKMARK")
+                row.label(text=state.project, icon="CHECKMARK")
             else:
                 row.label(text="Archicad not ready", icon="ERROR")
             row.operator("acsync.refresh", text="", icon="FILE_REFRESH")
+            if state.checked and state.ok:
+                box.label(text=state.details)
             if state.checked and not state.ok:
-                for line in _wrap(state.message, 38):
-                    box.label(text=line)
-            for line in state.instances:
-                for part in _wrap(line, 38):
-                    box.label(text=part, icon="INFO")
+                _lines(box, state.message)
+            for note in state.instances:
+                _lines(box, note, icon="INFO")
+            box.separator(factor=0.3)
+            box.label(text="IFC translator")
             if len(s.translators):
-                box.prop_search(s, "translator", s, "translators", text="Translator")
+                box.prop_search(s, "translator", s, "translators", text="")
             else:
-                box.prop(s, "translator", text="Translator")
-            box.prop(s, "scope", text="Export")
+                box.prop(s, "translator", text="")
+            box.label(text="Export")
+            box.prop(s, "scope", text="")
         else:
             layout.prop(s, "ifc_path", text="")
 
@@ -69,12 +72,10 @@ class ACSYNC_PT_main(_Base, Panel):
         if s.last_summary:
             box = layout.box()
             box.label(text="Last result", icon="TEXT")
-            for line in _wrap(s.last_summary, 40):
-                box.label(text=line)
-            row = box.row(align=True)
-            row.operator("acsync.copy_report", icon="COPYDOWN")
+            _lines(box, s.last_summary)
+            box.operator("acsync.copy_report", icon="COPYDOWN")
             if bpy.data.texts.get(operators.REPORT_TEXT_NAME):
-                row.label(text="Full report: Text Editor")
+                _lines(box, "Full report: Text Editor, 'AC Sync Report'")
 
 
 class ACSYNC_PT_output(_Base, Panel):
@@ -125,6 +126,14 @@ class ACSYNC_PT_advanced(_Base, Panel):
         col = self.layout.column()
         col.prop(s, "port")
         col.prop(s, "keep_ifc")
+
+
+def _lines(layout, text: str, icon: str = "NONE") -> None:
+    """Wrapped, compact text block (labels do not wrap by themselves)."""
+    col = layout.column(align=True)
+    col.scale_y = 0.75
+    for i, line in enumerate(_wrap(text, 40)):
+        col.label(text=line, icon=icon if i == 0 else "NONE")
 
 
 def _wrap(text: str, width: int) -> list[str]:

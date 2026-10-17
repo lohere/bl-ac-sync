@@ -29,6 +29,7 @@ s = bpy.context.scene.acsync
 s.source = "ARCHICAD"
 print("project:", found[0].project_name, "| tapir", found[0].tapir_version)
 print("refresh:", bpy.ops.acsync.refresh("EXEC_DEFAULT"), "->", ac_sync.operators.connection.message)
+print("last_port saved:", s.last_port)
 print("translators:", len(s.translators), "| default present:", s.translator in {t.name for t in s.translators})
 print("dry run:", bpy.ops.acsync.sync("EXEC_DEFAULT", dry_run=True, blocking=True), "|", s.last_summary)
 print("sync:", bpy.ops.acsync.sync("EXEC_DEFAULT", blocking=True), "|", s.last_summary)

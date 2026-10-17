@@ -20,6 +20,7 @@ from acsync import (
     find_instances,
     read_ifc,
 )
+from acsync.tapir import DEFAULT_PORT
 
 from . import engine
 
@@ -33,7 +34,9 @@ REPORT_TEXT_NAME = "AC Sync Report"
 class ConnectionState:
     checked: bool = False
     ok: bool = False
-    message: str = "Not checked yet"
+    message: str = "Not checked yet"  # error text when not ok
+    project: str = ""
+    details: str = ""  # "Archicad 29, Tapir 1.7.1"
     instances: list[str] = field(default_factory=list)
 
 
@@ -46,13 +49,26 @@ def is_busy() -> bool:
     return _busy.is_set()
 
 
+def _redraw(context) -> None:
+    """Repaint the sidebar so status text and button states update."""
+    screen = getattr(context, "screen", None)
+    for area in screen.areas if screen else ():
+        if area.type == "VIEW_3D":
+            area.tag_redraw()
+
+
 # -- helpers -----------------------------------------------------------------------------------
 
 
-def _pick_client(port: int) -> tuple[TapirClient, str]:
+def _pick_client(port: int, hint: int = 0) -> tuple[TapirClient, str]:
+    """Find Archicad. ``port`` is the user's explicit choice (0 = automatic); ``hint`` is the
+    port that worked last time. Tries hint and default port first (both at once), then scans."""
     if port:
         return TapirClient(port), ""
-    found = find_instances()
+    quick = [p for p in dict.fromkeys([hint, DEFAULT_PORT]) if p]
+    found = find_instances(ports=quick)  # known ports: ~0.03 s when Archicad is there
+    if not found:
+        found = find_instances()  # parallel scan of the whole range (~0.6 s)
     if not found:
         raise AcSyncError(
             "No Archicad found. Start Archicad, open the project and make sure the Tapir "
@@ -81,6 +97,7 @@ class Job:
     error: Exception | None = None
     note: str = ""
     project: str = ""
+    port: int = 0  # where Archicad was found, remembered in the scene settings
     done: bool = False
 
 
@@ -91,7 +108,8 @@ def _run_job(job: Job) -> None:
     try:
         if p["source"] == "ARCHICAD":
             _stage["text"] = "Looking for Archicad..."
-            client, job.note = _pick_client(p["port"])
+            client, job.note = _pick_client(p["port"], p["last_port"])
+            job.port = client.port
             info = client.require_tapir_version()
             job.project = info.project_name
             _stage["text"] = f"Archicad is exporting '{info.project_name}'..."
@@ -122,6 +140,7 @@ def _snapshot(settings) -> dict:
         "source": settings.source,
         "ifc_path": settings.ifc_path,
         "port": settings.port,
+        "last_port": settings.last_port,
         "translator": settings.translator,
         "scope": settings.scope,
         "skip_spaces": settings.skip_spaces,
@@ -191,6 +210,7 @@ class ACSYNC_OT_sync(Operator):
         if event.type != "TIMER":
             return {"PASS_THROUGH"}
         context.workspace.status_text_set(f"AC Sync: {_stage['text']}   (Esc to cancel)")
+        _redraw(context)
         if not self._job.done:
             return {"RUNNING_MODAL"}
         self._cleanup(context)
@@ -208,6 +228,7 @@ class ACSYNC_OT_sync(Operator):
             self._timer = None
         context.workspace.status_text_set(None)
         _busy.clear()
+        _redraw(context)
 
     def _finish(self, context, job: Job):
         if job.error is not None:
@@ -220,6 +241,8 @@ class ACSYNC_OT_sync(Operator):
             return {"CANCELLED"}
         scene = context.scene
         settings = scene.acsync
+        if job.port:
+            settings.last_port = job.port  # tried first next time
         try:
             report = engine.apply_model(scene, settings, job.model, dry_run=self.dry_run)
         except Exception as exc:
@@ -232,35 +255,100 @@ class ACSYNC_OT_sync(Operator):
         return {"FINISHED"}
 
 
+@dataclass
+class Check:
+    port: int
+    hint: int = 0
+    found_port: int = 0
+    info: object | None = None
+    translators: list[str] = field(default_factory=list)
+    note: str = ""
+    error: Exception | None = None
+    done: bool = False
+
+
+def _run_check(check: Check) -> None:
+    """Runs on a worker thread: must not touch bpy."""
+    try:
+        _stage["text"] = "Looking for Archicad..."
+        client, check.note = _pick_client(check.port, check.hint)
+        check.found_port = client.port
+        check.info = client.require_tapir_version()
+        check.translators = client.list_ifc_translators()
+    except Exception as exc:
+        check.error = exc
+    finally:
+        check.done = True
+
+
 class ACSYNC_OT_refresh(Operator):
     bl_idname = "acsync.refresh"
     bl_label = "Check Archicad"
     bl_description = "Look for a running Archicad and load its IFC translator list"
 
+    blocking: BoolProperty(
+        name="Wait", description="Run without a background thread (scripting, tests)",
+        default=False, options={"SKIP_SAVE", "HIDDEN"},
+    )
+
+    _timer = None
+    _check: Check | None = None
+
+    @classmethod
+    def poll(cls, context):
+        return not _busy.is_set()
+
     def execute(self, context):
+        check = Check(context.scene.acsync.port, context.scene.acsync.last_port)
+        _run_check(check)
+        return self._finish(context, check)
+
+    def invoke(self, context, event):
+        if self.blocking:
+            return self.execute(context)
+        self._check = Check(context.scene.acsync.port, context.scene.acsync.last_port)
+        _busy.set()
+        threading.Thread(target=_run_check, args=(self._check,), daemon=True).start()
+        wm = context.window_manager
+        self._timer = wm.event_timer_add(0.1, window=context.window)
+        wm.modal_handler_add(self)
+        _redraw(context)
+        return {"RUNNING_MODAL"}
+
+    def modal(self, context, event):
+        if event.type != "TIMER":
+            return {"PASS_THROUGH"}
+        if not self._check.done:
+            return {"RUNNING_MODAL"}
+        context.window_manager.event_timer_remove(self._timer)
+        self._timer = None
+        _busy.clear()
+        return self._finish(context, self._check)
+
+    def _finish(self, context, check: Check):
         settings = context.scene.acsync
         connection.checked = True
-        try:
-            client, note = _pick_client(settings.port)
-            info = client.require_tapir_version()
-            translators = client.list_ifc_translators()
-        except Exception as exc:
+        _redraw(context)
+        if check.error is not None:
             connection.ok = False
-            connection.message = str(exc)
+            connection.message = str(check.error)
             connection.instances = []
-            self.report({"WARNING"}, str(exc))
+            self.report({"WARNING"}, str(check.error))
             return {"CANCELLED"}
+        info = check.info
+        settings.last_port = check.found_port
         settings.translators.clear()
-        for name in sorted(translators):
+        for name in sorted(check.translators):
             settings.translators.add().name = name
         connection.ok = True
-        connection.message = (
-            f"{info.project_name or 'untitled'} - Archicad {info.archicad_version}, "
-            f"Tapir {info.tapir_version}"
-        )
-        connection.instances = [note] if note else []
-        if settings.translator not in translators:
-            self.report({"WARNING"}, f"Translator '{settings.translator}' not found in this project.")
+        connection.project = info.project_name or "untitled"
+        connection.details = f"Archicad {info.archicad_version}, Tapir {info.tapir_version}"
+        connection.message = f"{connection.project} - {connection.details}"
+        connection.instances = [check.note] if check.note else []
+        if settings.translator not in check.translators:
+            self.report(
+                {"WARNING"}, f"Translator '{settings.translator}' not found in this project."
+            )
         return {"FINISHED"}
 
 

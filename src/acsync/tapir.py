@@ -13,6 +13,7 @@ import os
 import urllib.error
 import urllib.request
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
@@ -213,21 +214,32 @@ class TapirClient:
         return path
 
 
+def probe_instance(
+    port: int = DEFAULT_PORT, host: str = DEFAULT_HOST, timeout: float = 0.6
+) -> ArchicadInfo | None:
+    """Ask one port whether an Archicad with Tapir answers there. ``None`` if not."""
+    try:
+        TapirClient(port, host, timeout=timeout).request("API.GetProductInfo")
+    except (TapirConnectionError, TapirCommandError):
+        return None
+    try:
+        return TapirClient(port, host, timeout=max(timeout, 5.0)).info()
+    except (TapirConnectionError, TapirCommandError):
+        return None  # Archicad is up but Tapir is missing, or a dialog is open
+
+
 def find_instances(
     host: str = DEFAULT_HOST, ports: Iterable[int] = PORT_RANGE, timeout: float = 0.6
 ) -> list[ArchicadInfo]:
-    """Scan the Archicad port range for running instances that answer to Tapir."""
-    found = []
-    for port in ports:
-        client = TapirClient(port, host, timeout=timeout)
-        try:
-            client.request("API.GetProductInfo")
-        except TapirConnectionError:
-            continue
-        except TapirCommandError:
-            continue
-        try:
-            found.append(TapirClient(port, host, timeout=5.0).info())
-        except (TapirConnectionError, TapirCommandError):
-            continue  # Archicad is up but Tapir is missing or a dialog is open
-    return found
+    """Scan the Archicad port range for running instances that answer to Tapir.
+
+    Closed ports on Windows do not refuse the connection, they time out, so the ports are
+    probed in parallel: the whole scan costs one timeout (~0.6 s) instead of one per port.
+    For the usual single instance, ``probe_instance()`` on the default port is instant.
+    """
+    port_list = list(ports)
+    if not port_list:
+        return []
+    with ThreadPoolExecutor(max_workers=len(port_list)) as pool:
+        results = list(pool.map(lambda p: probe_instance(p, host, timeout), port_list))
+    return [info for info in results if info is not None]

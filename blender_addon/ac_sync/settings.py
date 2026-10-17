@@ -57,6 +57,10 @@ class ACSyncSettings(PropertyGroup):
         description="Tapir port of the Archicad to use. 0 picks the first Archicad found",
         default=0, min=0, max=65535,
     )
+    last_port: IntProperty(
+        name="Last port", description="Port where Archicad was found last time (tried first)",
+        default=0, min=0, max=65535, options={"HIDDEN"},
+    )
     translator: StringProperty(name="IFC translator", default=DEFAULT_TRANSLATOR)
     translators: CollectionProperty(type=ACSyncNameItem)
     scope: EnumProperty(name="Export", items=SCOPES, default=DEFAULT_SCOPE)

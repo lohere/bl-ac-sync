@@ -13,8 +13,7 @@ website = "https://github.com/lohere/AC-Sync"
 # (Blender 4.2-4.5 use Python 3.11; supporting them needs a second wheel and testing.)
 blender_version_min = "5.0.0"
 
-# Placeholder: the project license is not decided yet. Blender add-ons that use bpy are
-# normally released under a GPL-compatible license; revisit before publishing.
+# Blender add-ons that use bpy must be GPL-compatible; the full text is in the repository's LICENSE.
 license = ["SPDX:GPL-3.0-or-later"]
 
 # Wheels are added by tools/build_extension.py (ifcopenshell for the target platform).

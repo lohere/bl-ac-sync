@@ -188,8 +188,8 @@ export), `ACSYNC_LIVE_ARCHICAD=1` (tests against a running Archicad), `ACSYNC_BL
 
 ## License
 
-Planned: **GNU General Public License v3.0 or later** (GPL-3.0-or-later). The license file is added
-when the project is published.
+**GNU General Public License v3.0 or later** (GPL-3.0-or-later), see [`LICENSE`](LICENSE).
+Copyright (C) 2026 Drotár Bence.
 
 Third-party software: [Tapir](https://github.com/ENZYME-APD/tapir-archicad-automation) (MIT, a separate
 program, not included) and [IfcOpenShell](https://ifcopenshell.org/) (LGPL-3.0, included as a library).

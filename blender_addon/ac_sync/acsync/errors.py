@@ -37,3 +37,8 @@ class IfcReadError(AcSyncError):
 
 class TapirNotInstalledError(AcSyncError):
     """Archicad answers, but the Tapir add-on is not installed or not loaded."""
+
+
+# What a step that digs in Archicad's answers can run into: Archicad refusing, or an answer that
+# is not shaped the way the code expects. Steps that must never stop a sync catch exactly this.
+UNEXPECTED_ANSWER = (AcSyncError, KeyError, IndexError, TypeError)

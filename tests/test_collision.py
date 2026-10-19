@@ -1,4 +1,5 @@
-"""Building materials excluded from collision detection: finding them and switching them on."""
+"""Building materials excluded from collision detection: finding them (collision.py) and
+switching them on for an export (flagswitch.py)."""
 
 import copy
 import os
@@ -10,6 +11,7 @@ from acsync import (
     TapirClient,
     check_completeness,
     collision,
+    flagswitch,
     restore_pending,
 )
 from acsync.errors import AcSyncError
@@ -146,7 +148,7 @@ def site_model(*outlines):
 
 @pytest.fixture()
 def project(fake_archicad, tmp_path, monkeypatch):
-    monkeypatch.setattr(collision, "recovery_path", lambda: str(tmp_path / "pending.json"))
+    monkeypatch.setattr(flagswitch, "recovery_path", lambda: str(tmp_path / "pending.json"))
     proj = FakeProject(fake_archicad)
     proj.client = TapirClient(fake_archicad.port, timeout=5)
     proj.recovery = tmp_path / "pending.json"
@@ -219,7 +221,7 @@ def talaj_materials():
 
 def test_flag_is_on_inside_and_everything_is_back_afterwards(project):
     original = copy.deepcopy(project.materials[TALAJ])
-    with MaterialFlagSwitch(project.client, talaj_materials(), "p.pln", "p") as switch:
+    with MaterialFlagSwitch(project.client, talaj_materials(), "p.pln") as switch:
         assert project.flag("Talaj") is True
         assert project.recovery.exists()
         assert project.flag("Air Space") is False  # not asked for: untouched
@@ -250,7 +252,7 @@ def test_if_archicad_ignores_the_change_the_switch_fails_cleanly(project):
 
 
 def test_failed_restore_is_reported_and_recoverable(project):
-    switch = MaterialFlagSwitch(project.client, talaj_materials(), "p.pln", "p")
+    switch = MaterialFlagSwitch(project.client, talaj_materials(), "p.pln")
     with switch:
         project.accept_writes = False  # Archicad stops listening before the restore
         project.materials[TALAJ]["collisionDetection"] = True
@@ -287,8 +289,8 @@ def test_second_pass_runs_with_the_flag_on_and_leaves_it_off_afterwards(project)
         return run
 
     progress = []
-    model, result, warnings = collision.reexport_including(
-        project.client, talaj_materials(), ("p.pln", "p"),
+    model, result, warnings = flagswitch.reexport_including(
+        project.client, talaj_materials(), "p.pln",
         export=step("export"), read=step("read"), check=step("check"), progress=progress.append,
     )
     assert seen == {"export": True, "read": True, "check": True}
@@ -303,8 +305,8 @@ def test_second_pass_restores_when_the_export_fails(project):
         raise AcSyncError("Archicad closed a dialog")
 
     with pytest.raises(AcSyncError):
-        collision.reexport_including(
-            project.client, talaj_materials(), ("p.pln", "p"),
+        flagswitch.reexport_including(
+            project.client, talaj_materials(), "p.pln",
             export=broken_export, read=lambda: None, check=lambda m: None,
         )
     assert project.flag("Talaj") is False and not project.recovery.exists()

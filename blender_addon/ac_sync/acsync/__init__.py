@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """AC-Blender Sync core: Archicad (Tapir) -> IFC -> mesh data, independent of Blender."""
 
-from .collision import ExcludedMaterial, MaterialFlagSwitch, reexport_including, restore_pending
+from .collision import ExcludedMaterial
 from .completeness import Completeness, MissingElement, check_completeness
 from .diff import Change, Diff, SceneRecord, compute_diff
+from .endsurface import EndSurfaceResult, apply_inherited_end_surfaces
 from .errors import (
+    UNEXPECTED_ANSWER,
     AcSyncError,
     CommandNotAvailableError,
     IfcReadError,
@@ -14,6 +16,7 @@ from .errors import (
     TapirNotInstalledError,
     TapirVersionError,
 )
+from .flagswitch import MaterialFlagSwitch, reexport_including, restore_pending
 from .ifc_reader import (
     DEFAULT_EXCLUDED_TYPES,
     Element,
@@ -37,13 +40,14 @@ from .tapir import (
 )
 from .uv import box_projection_uvs
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 __all__ = [
     "DEFAULT_EXCLUDED_TYPES",
     "DEFAULT_SCOPE",
     "DEFAULT_TRANSLATOR",
     "PARTIAL_SCOPES",
+    "UNEXPECTED_ANSWER",
     "AcSyncError",
     "ArchicadInfo",
     "Change",
@@ -51,6 +55,7 @@ __all__ = [
     "Completeness",
     "Diff",
     "Element",
+    "EndSurfaceResult",
     "ExcludedMaterial",
     "IfcModel",
     "IfcReadError",
@@ -67,6 +72,7 @@ __all__ = [
     "TapirConnectionError",
     "TapirNotInstalledError",
     "TapirVersionError",
+    "apply_inherited_end_surfaces",
     "box_projection_uvs",
     "check_completeness",
     "compute_diff",

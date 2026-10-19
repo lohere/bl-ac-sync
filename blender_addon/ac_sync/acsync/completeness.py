@@ -23,7 +23,7 @@ from collections import Counter
 from dataclasses import dataclass, field, replace
 
 from .collision import ExcludedMaterial, find_excluded
-from .errors import AcSyncError
+from .errors import UNEXPECTED_ANSWER, AcSyncError
 from .ifc_reader import IfcModel
 from .tapir import TapirClient
 
@@ -75,6 +75,13 @@ class Completeness:
     def hidden(self) -> list[MissingElement]:
         """Missing because Archicad itself hides them (hidden layer, Renovation filter, ...)."""
         return [m for m in self.missing if m.reasons]
+
+    @property
+    def has_findings(self) -> bool:
+        """Anything worth a line in the report besides the plain summary."""
+        return bool(
+            self.missing or self.excluded_materials or self.included_materials or self.notes
+        )
 
     @property
     def ok(self) -> bool:
@@ -138,7 +145,9 @@ class Completeness:
         if not self.missing:
             return [self.summary(), *self.material_lines(), *self.notes]
         by_type = ", ".join(f"{n} {t}" for t, n in sorted(self.missing_by_type.items()))
-        out = [f"{self.summary()} Missing in total: {len(self.missing)} of {self.expected} ({by_type})."]
+        out = [
+            f"{self.summary()} Missing in total: {len(self.missing)} of {self.expected} ({by_type})."
+        ]
         layers = Counter(m.layer for m in self.missing if m.layer)
         if layers:
             out.append("Layers: " + ", ".join(f"{name} ({n})" for name, n in layers.most_common()))
@@ -203,21 +212,27 @@ def _check(client: TapirClient, model: IfcModel, check_meshes: bool = False) -> 
         if absent:
             result.missing_by_type[element_type] = len(absent)
             missing_raw.extend((g, element_type) for g in absent)
-    if not missing_raw:
-        _explain_materials(client, model, result, check_meshes)
-        return result
+    if missing_raw:
+        _describe_missing(client, missing_raw, result)
+    _explain_materials(client, model, result, check_meshes)
+    return result
 
-    # Why are they hidden in Archicad? Ask the same question with each visibility filter.
+
+def _describe_missing(
+    client: TapirClient, missing_raw: list[tuple[str, str]], result: Completeness
+) -> None:
+    """Fill ``result.missing``: for each absent element its Element ID, layer and, when Archicad
+    itself hides it, why."""
+    # Ask the same question with each visibility filter: what is not visible is hidden by it.
     visible: dict[str, set[str]] = {name: set() for name, _ in _VISIBILITY_FILTERS}
     for element_type in result.missing_by_type:
         for name, _ in _VISIBILITY_FILTERS:
             visible[name].update(_guids(client, element_type, [name]))
 
-    detailed = missing_raw[:MAX_DETAILED]
-    ids = _element_ids(client, [g for g, _ in detailed])
-    layers = _layer_names(client, [g for g, _ in detailed])
+    detailed = [g for g, _ in missing_raw[:MAX_DETAILED]]
+    ids = _element_ids(client, detailed)
+    layers = _layer_names(client, detailed)
     for index, (guid, element_type) in enumerate(missing_raw):
-        reasons = tuple(text for name, text in _VISIBILITY_FILTERS if guid not in visible[name])
         in_detail = index < MAX_DETAILED
         result.missing.append(
             MissingElement(
@@ -225,11 +240,11 @@ def _check(client: TapirClient, model: IfcModel, check_meshes: bool = False) -> 
                 archicad_type=element_type,
                 element_id=ids.get(guid, "") if in_detail else "",
                 layer=layers.get(guid, "") if in_detail else "",
-                reasons=reasons,
+                reasons=tuple(
+                    text for name, text in _VISIBILITY_FILTERS if guid not in visible[name]
+                ),
             )
         )
-    _explain_materials(client, model, result, check_meshes)
-    return result
 
 
 def _explain_materials(
@@ -240,7 +255,7 @@ def _explain_materials(
     candidates = [m.guid for m in result.missing if not m.reasons]
     try:
         findings = find_excluded(client, candidates, model, check_meshes)
-    except (AcSyncError, KeyError, IndexError, TypeError) as exc:
+    except UNEXPECTED_ANSWER as exc:
         result.notes.append(f"Could not check the Building Materials: {exc}")
         return
     result.excluded_materials = findings.materials

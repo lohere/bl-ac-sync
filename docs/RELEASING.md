@@ -61,3 +61,27 @@ Builds 0.0.1, 0.0.2 and 0.0.3 into a temporary repository, installs 0.0.1 into a
 profile with Blender's own command line, updates to 0.0.2, checks that the updated add-on works (no
 policy warnings, a sync runs), then updates the files under a running Blender and reports what a
 refresh and a disable/enable do. Your own Blender settings are not touched.
+
+## Before the first public release
+
+Done:
+
+- [x] License: GPL-3.0-or-later (`LICENSE`, shipped inside the zip, SPDX line in every source file,
+  `license` / `copyright` in the manifest).
+- [x] `CHANGELOG.md`, version bumped in the manifest, `pyproject.toml` and `acsync/__init__.py`.
+- [x] Tested against a real Archicad project, including a stair and a railing.
+
+Open, in this order:
+
+1. **Final name.** Decide it first: the manifest `id` is the extension's identity, and changing it
+   after people installed it breaks their updates. A rename touches the `ac_sync` / `acsync` package
+   names, operator ids, the scene property, the manifest `id` and `name`, the docs and the GitHub
+   repository. Keep "Archicad" out of the name (Graphisoft trademark).
+2. **Hosting.** Publish the repository (see above) and test an update over the internet; only
+   `file://` has been tried.
+3. **Platforms.** Windows x64 and Blender 5.0+ only. macOS needs its own ifcopenshell wheel and
+   someone to test it.
+4. **Version number.** Choose the number of the first public release (for example 0.1.0), and move
+   the changelog entries under it.
+5. **Live-test the optional material switch once more** on the release build, and check Tapir's
+   current release for changes to the commands the add-on uses.

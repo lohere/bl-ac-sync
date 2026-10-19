@@ -1,13 +1,15 @@
 schema_version = "1.0.0"
 
 id = "ac_sync"
-version = "0.0.1"
+version = "0.0.2"
 name = "AC Sync"
 tagline = "Update Archicad geometry in Blender without losing your work"
 maintainer = "Drotár Bence"
 type = "add-on"
 
 website = "https://github.com/lohere/AC-Sync"
+tags = ["Import-Export"]
+copyright = ["2026 Drotár Bence"]
 
 # The bundled ifcopenshell wheel is for Python 3.13, which ships with Blender 5.0 and newer.
 # (Blender 4.2-4.5 use Python 3.11; supporting them needs a second wheel and testing.)

@@ -67,6 +67,7 @@ def stage(version=None):
     if os.path.isdir(BUILD):
         shutil.rmtree(BUILD)
     shutil.copytree(ADDON, BUILD, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "wheels"))
+    shutil.copyfile(os.path.join(ROOT, "LICENSE"), os.path.join(BUILD, "LICENSE"))  # GPL: ship it
     if version:
         manifest = os.path.join(BUILD, "blender_manifest.toml")
         with open(manifest, encoding="utf-8") as fh:

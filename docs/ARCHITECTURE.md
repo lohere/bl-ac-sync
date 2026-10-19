@@ -79,11 +79,16 @@ added later on top of the same core.
 - A changed model offset is treated as a geometry change for every object.
 - Removed elements: move to `<root> - Removed` (default), hide, report only, or delete.
   A removed element that comes back is restored.
-- Collision-detection flag (`acsync/collision.py`): materials with the flag off are traced from
-  the missing elements (Archicad components API) and from terrain Meshes whose outline is not in
-  the IFC Site. Opt-in: `MaterialFlagSwitch` turns the flag on for those materials around a
-  second export and restores it (recovery file in the temp folder). Partial exports (selection, one story) cannot
-  prove an element is gone, so they skip removal detection (`detect_removed=False`).
+- Wall end surfaces (`acsync/endsurface.py`): Archicad's *inherit end surface* is lost in the IFC;
+  after reading, the end faces of flagged walls take the finish of the neighbour's face that is flush
+  with the end, from neighbours that have the flag too (Tapir `GetRelationsOfElements` +
+  `GetDetailsOfElements`, neighbours also found by position). Inferred from 8 observed wall ends.
+- Collision-detection flag: `acsync/collision.py` traces materials with the flag off from the
+  missing elements (Archicad components API) and from terrain Meshes whose outline is not in the
+  IFC Site. Opt-in: `acsync/flagswitch.py` turns the flag on for those materials around a second
+  export and restores it (recovery file in the temp folder).
+- Partial exports (selection, one story) cannot prove an element is gone, so they skip removal
+  detection (`detect_removed=False`).
 - The core is a sub-package of the extension and ifcopenshell ships as a wheel listed in the
   manifest, so Blender installs everything itself. Verified by installing the built zip into a clean
   Blender profile; Blender's extension checker reports no policy violations.

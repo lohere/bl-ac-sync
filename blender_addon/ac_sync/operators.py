@@ -10,17 +10,19 @@ import time
 from dataclasses import dataclass, field
 
 import bpy
-from bpy.props import BoolProperty
+from bpy.props import BoolProperty, StringProperty
 from bpy.types import Operator
 
 from . import engine
 from .acsync import (
     DEFAULT_EXCLUDED_TYPES,
     PARTIAL_SCOPES,
+    UNEXPECTED_ANSWER,
     AcSyncError,
     Completeness,
     IfcModel,
     TapirClient,
+    apply_inherited_end_surfaces,
     check_completeness,
     discovery_error,
     read_ifc,
@@ -109,6 +111,7 @@ class Job:
     port: int = 0  # where Archicad was found, remembered in the scene settings
     completeness: Completeness | None = None
     restored: list[str] = field(default_factory=list)  # leftovers of an interrupted sync, undone
+    wall_end_lines: list[str] = field(default_factory=list)  # what matching wall ends did
     done: bool = False
 
 
@@ -121,6 +124,17 @@ def _read(ifc_path: str, p: dict) -> IfcModel:
     )
 
 
+def _match_wall_ends(client, model: IfcModel, p: dict) -> list[str]:
+    """Give wall ends the finish Archicad shows (the IFC lacks it). Returns report lines; a
+    problem here must never stop the sync."""
+    if not (p["inherit_end_surfaces"] and p["archicad_coordinates"]):
+        return []
+    try:
+        return apply_inherited_end_surfaces(client, model).lines
+    except UNEXPECTED_ANSWER as exc:
+        return [f"Wall ends: could not match the finishes ({exc})."]
+
+
 def _check(client, model: IfcModel, p: dict) -> Completeness:
     # Terrain can only be compared with the IFC when it is in Archicad coordinates and present.
     meshes = p["archicad_coordinates"] and not p["skip_site"]
@@ -131,13 +145,20 @@ def _include_excluded_materials(job: Job, client, info, ifc_path: str, p: dict) 
     """Export again with collision detection switched on for the materials that cost elements,
     then put the original settings back. On any Archicad-side problem the first export stays."""
     first = job.completeness
+    wall_end_lines: list[str] = []
+
+    def read() -> IfcModel:
+        model = _read(ifc_path, p)
+        wall_end_lines[:] = _match_wall_ends(client, model, p)
+        return model
+
     try:
         model, check, warnings = reexport_including(
             client,
             first.excluded_materials,
-            (info.project_path, info.project_name),
+            info.project_path,
             export=lambda: client.export_ifc(ifc_path, p["translator"], p["scope"]),
-            read=lambda: _read(ifc_path, p),
+            read=read,
             check=lambda m: _check(client, m, p),
             progress=lambda text: _stage.update(text=text),
         )
@@ -146,7 +167,7 @@ def _include_excluded_materials(job: Job, client, info, ifc_path: str, p: dict) 
         return
     check.included_materials = [m.name for m in first.excluded_materials]
     check.notes = warnings + check.notes
-    job.model, job.completeness = model, check
+    job.model, job.completeness, job.wall_end_lines = model, check, wall_end_lines
 
 
 def _run_job(job: Job) -> None:
@@ -173,6 +194,8 @@ def _run_job(job: Job) -> None:
             job.project = os.path.basename(ifc_path)
         _stage["text"] = "Reading geometry..."
         job.model = _read(ifc_path, p)
+        if p["source"] == "ARCHICAD":
+            job.wall_end_lines = _match_wall_ends(client, job.model, p)
         if p["source"] == "ARCHICAD" and p["check_completeness"]:
             _stage["text"] = "Checking completeness..."
             job.completeness = _check(client, job.model, p)
@@ -203,6 +226,7 @@ def _snapshot(settings) -> dict:
         "skip_site": settings.skip_site,
         "archicad_coordinates": settings.archicad_coordinates,
         "uv_scale": settings.uv_scale if settings.generate_uvs else None,
+        "inherit_end_surfaces": settings.inherit_end_surfaces,
         "check_completeness": settings.check_completeness,
         "include_excluded": settings.include_excluded_materials,
         "keep_ifc": settings.keep_ifc,
@@ -238,6 +262,12 @@ class ACSYNC_OT_sync(Operator):
 
     _timer = None
     _job: Job | None = None
+
+    @classmethod
+    def description(cls, context, properties):
+        if properties.dry_run:
+            return "Preview what a sync would add, change or remove. The scene is not changed"
+        return cls.bl_description
 
     @classmethod
     def poll(cls, context):
@@ -314,14 +344,13 @@ class ACSYNC_OT_sync(Operator):
         if job.note:
             report.warnings.insert(0, job.note)
         report.warnings[:0] = job.restored
+        report.lines[:0] = job.wall_end_lines
         check = job.completeness
         global last_completeness
         last_completeness = check
         settings.last_check = check.summary() if check and check.checked else ""
         settings.last_check_ok = bool(check is None or not check.checked or check.ok)
-        if check is not None and check.checked and (
-            check.missing or check.excluded_materials or check.included_materials or check.notes
-        ):
+        if check is not None and check.checked and check.has_findings:
             # Unexpected gaps are warnings; hidden-in-Archicad ones are only information.
             target = report.warnings if not check.ok else report.lines
             target.extend(check.lines())
@@ -488,6 +517,19 @@ class ACSYNC_OT_select_changed(Operator):
         return {"FINISHED"} if _select_last_changed(self, context) else {"CANCELLED"}
 
 
+class ACSYNC_OT_set_translator(Operator):
+    bl_idname = "acsync.set_translator"
+    bl_label = "Use translator"
+    bl_description = "Use this IFC translator for the Archicad export"
+    bl_options = {"INTERNAL"}
+
+    name: StringProperty(name="Translator", description="Name of the IFC translator")
+
+    def execute(self, context):
+        context.scene.acsync.translator = self.name
+        return {"FINISHED"}
+
+
 class ACSYNC_OT_apply_material_map(Operator):
     bl_idname = "acsync.apply_material_map"
     bl_label = "Apply material mapping"
@@ -527,6 +569,7 @@ CLASSES = (
     ACSYNC_OT_copy_report,
     ACSYNC_OT_select_missing,
     ACSYNC_OT_select_changed,
+    ACSYNC_OT_set_translator,
 )
 
 

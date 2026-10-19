@@ -2,7 +2,7 @@
 """N-panel (3D viewport sidebar, tab 'AC Sync')."""
 
 import bpy
-from bpy.types import Panel, UIList
+from bpy.types import Menu, Panel, UIList
 
 from . import __version__, operators
 
@@ -12,6 +12,25 @@ class ACSYNC_UL_surfaces(UIList):
         row = layout.row(align=True)
         row.label(text=item.name, icon="MATERIAL")
         row.prop_search(item, "blender_material", bpy.data, "materials", text="")
+
+
+class ACSYNC_MT_translators(Menu):
+    bl_label = "IFC translator"
+    bl_description = "Choose the Archicad IFC translator used for the export"
+
+    def draw(self, context):
+        s = context.scene.acsync
+        layout = self.layout
+        if not len(s.translators):
+            layout.label(text="List not loaded yet")
+            layout.operator("acsync.refresh", text="Load from Archicad", icon="FILE_REFRESH")
+            return
+        for item in s.translators:
+            op = layout.operator(
+                "acsync.set_translator", text=item.name,
+                icon="CHECKMARK" if item.name == s.translator else "BLANK1",
+            )
+            op.name = item.name
 
 
 class _Base:
@@ -50,10 +69,7 @@ class ACSYNC_PT_main(_Base, Panel):
                 _lines(box, note, icon="INFO")
             box.separator(factor=0.3)
             box.label(text="IFC translator")
-            if len(s.translators):
-                box.prop_search(s, "translator", s, "translators", text="")
-            else:
-                box.prop(s, "translator", text="")
+            box.menu("ACSYNC_MT_translators", text=s.translator, icon="DOWNARROW_HLT")
             box.label(text="Export")
             box.prop(s, "scope", text="")
         else:
@@ -111,6 +127,9 @@ class ACSYNC_PT_output(_Base, Panel):
         col.prop(s, "root_collection")
         col.prop(s, "removed_policy", text="Removed")
         col.prop(s, "archicad_coordinates")
+        sub = col.column()
+        sub.active = s.archicad_coordinates
+        sub.prop(s, "inherit_end_surfaces")
         col.prop(s, "offset")
         col.separator()
         col.prop(s, "generate_uvs")
@@ -185,6 +204,7 @@ def _wrap(text: str, width: int) -> list[str]:
 
 CLASSES = (
     ACSYNC_UL_surfaces,
+    ACSYNC_MT_translators,
     ACSYNC_PT_main,
     ACSYNC_PT_output,
     ACSYNC_PT_materials,

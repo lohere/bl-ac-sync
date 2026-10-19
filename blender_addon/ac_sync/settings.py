@@ -38,7 +38,7 @@ class ACSyncNameItem(PropertyGroup):
 class ACSyncSurfaceRow(PropertyGroup):
     """One Archicad surface and the Blender material it should use."""
 
-    name: StringProperty(name="Archicad surface")
+    name: StringProperty(name="Archicad surface", description="Name of the surface in Archicad")
     blender_material: StringProperty(
         name="Blender material", description="Leave empty to create a material from the surface"
     )
@@ -47,13 +47,17 @@ class ACSyncSurfaceRow(PropertyGroup):
 class ACSyncSettings(PropertyGroup):
     source: EnumProperty(
         name="Source",
+        description="Where the model comes from",
         items=[
             ("ARCHICAD", "Archicad", "Export from a running Archicad automatically"),
             ("FILE", "IFC file", "Read an IFC file you exported yourself"),
         ],
         default="ARCHICAD",
     )
-    ifc_path: StringProperty(name="IFC file", subtype="FILE_PATH")
+    ifc_path: StringProperty(
+        name="IFC file", subtype="FILE_PATH",
+        description="The IFC file to import (Archicad: File > Save As > IFC)",
+    )
     port: IntProperty(
         name="Port",
         description="Tapir port of the Archicad to use. 0 picks the first Archicad found",
@@ -63,16 +67,26 @@ class ACSyncSettings(PropertyGroup):
         name="Last port", description="Port where Archicad was found last time (tried first)",
         default=0, min=0, max=65535, options={"HIDDEN"},
     )
-    translator: StringProperty(name="IFC translator", default=DEFAULT_TRANSLATOR)
-    translators: CollectionProperty(type=ACSyncNameItem)
-    scope: EnumProperty(name="Export", items=SCOPES, default=DEFAULT_SCOPE)
+    translator: StringProperty(
+        name="IFC translator", default=DEFAULT_TRANSLATOR,
+        description="The Archicad IFC export settings to use. The default keeps one mesh per "
+        "element with its GUID and surfaces",
+    )
+    translators: CollectionProperty(type=ACSyncNameItem, options={"HIDDEN"})
+    scope: EnumProperty(
+        name="Export", items=SCOPES, default=DEFAULT_SCOPE,
+        description="Which elements Archicad exports",
+    )
 
     root_collection: StringProperty(
         name="Collection",
         description="Everything the tool manages lives here; nothing outside is touched",
         default="AC_Sync",
     )
-    removed_policy: EnumProperty(name="Removed elements", items=REMOVED_POLICIES, default="MOVE")
+    removed_policy: EnumProperty(
+        name="Removed elements", items=REMOVED_POLICIES, default="MOVE",
+        description="What happens to objects whose element was deleted in Archicad",
+    )
     offset: FloatVectorProperty(
         name="Offset", description="Shift the whole model (metres)", subtype="TRANSLATION",
         unit="LENGTH", default=(0.0, 0.0, 0.0),
@@ -82,6 +96,15 @@ class ACSyncSettings(PropertyGroup):
         description=(
             "Undo the Project North rotation Archicad bakes into IFC, so the model sits where it "
             "does in Archicad. Turn off to keep IFC world coordinates"
+        ),
+        default=True,
+    )
+    inherit_end_surfaces: BoolProperty(
+        name="Match wall end finishes",
+        description=(
+            "Archicad's IFC export ignores a wall's 'inherit end surface' setting and leaves the "
+            "wall ends striped with the wall's own layers. Give those ends the finish of the "
+            "wall they join, as Archicad shows them. Needs 'Archicad coordinates'"
         ),
         default=True,
     )
@@ -98,8 +121,14 @@ class ACSyncSettings(PropertyGroup):
         description="1 = a texture repeats once per metre; larger values make textures bigger",
         default=1.0, min=0.01, max=1000.0, precision=3,
     )
-    skip_spaces: BoolProperty(name="Skip zones", default=True)
-    skip_openings: BoolProperty(name="Skip opening voids", default=True)
+    skip_spaces: BoolProperty(
+        name="Skip zones", default=True,
+        description="Do not import Archicad zones (rooms)",
+    )
+    skip_openings: BoolProperty(
+        name="Skip opening voids", default=True,
+        description="Do not import the cut-out volumes of windows, doors and openings",
+    )
     skip_site: BoolProperty(
         name="Skip terrain",
         description="Archicad Mesh elements arrive merged as one 'Site' object",
@@ -137,12 +166,12 @@ class ACSyncSettings(PropertyGroup):
         description="Added to the name of materials the tool creates",
         default="",
     )
-    surfaces: CollectionProperty(type=ACSyncSurfaceRow)
-    surfaces_index: IntProperty()
+    surfaces: CollectionProperty(type=ACSyncSurfaceRow, options={"HIDDEN"})
+    surfaces_index: IntProperty(options={"HIDDEN"})
 
-    last_summary: StringProperty(default="")
-    last_check: StringProperty(default="")  # completeness summary line
-    last_check_ok: BoolProperty(default=True)
+    last_summary: StringProperty(default="", options={"HIDDEN"})
+    last_check: StringProperty(default="", options={"HIDDEN"})  # completeness summary line
+    last_check_ok: BoolProperty(default=True, options={"HIDDEN"})
 
     def material_map(self) -> MaterialMap:
         mapping = {row.name: row.blender_material for row in self.surfaces if row.blender_material}

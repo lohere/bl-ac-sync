@@ -230,6 +230,33 @@ def test_select_changed_skips_hidden_objects():
     assert selected_guids() == {SLAB_GUID}
 
 
+def test_every_setting_and_button_has_a_tooltip():
+    props = bpy.types.Scene.bl_rna.properties["acsync"].fixed_type.bl_rna.properties
+    missing = [
+        p.identifier for p in props
+        if p.identifier not in ("rna_type", "name") and not p.is_hidden and not p.description
+    ]
+    missing += [
+        c.bl_idname for c in operators.CLASSES
+        if not (getattr(c, "bl_description", "") or "").strip()
+    ]
+    missing += [
+        f"{c.__name__}.{p.identifier}"
+        for c in operators.CLASSES
+        for p in getattr(bpy.ops.acsync, c.bl_idname.split(".")[1]).get_rna_type().properties
+        if p.identifier not in ("rna_type", "name") and not p.is_hidden and not p.description
+    ]
+    assert not missing, missing
+
+
+def test_translator_menu_sets_the_translator():
+    s = fresh()
+    s.translators.add().name = "Exact Geometry Export"
+    result = bpy.ops.acsync.set_translator("EXEC_DEFAULT", name="Exact Geometry Export")
+    assert result == {"FINISHED"}
+    assert s.translator == "Exact Geometry Export"
+
+
 def test_duplicate_element_ids_are_two_objects():
     s = fresh()
     other = "EEEEEEEE-0000-4000-8000-000000000005"
@@ -424,6 +451,10 @@ def test_real_model():
     assert "0 added, 0 geometry changed" in summary, summary
     walls = [o for o in objs().values() if o["acsync_type"] == "IfcWall"]
     assert walls and all(o.data.polygons for o in walls)
+    for ifc_type, label in (("IfcStair", "Stairs"), ("IfcRailing", "Railings")):
+        for o in (o for o in objs().values() if o["acsync_type"] == ifc_type):
+            assert o.data.polygons, ifc_type
+            assert o.users_collection[0].name == f"AC_Sync - {label}", (ifc_type, o.users_collection)
     return f"{n} objects"
 
 

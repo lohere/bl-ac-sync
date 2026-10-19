@@ -343,7 +343,8 @@ def apply_model(
         f"{len(diff.removed)} removed",
         f"{len(removed)} removed" if detect_removed else "removals not checked (partial export)",
     )
-    report.changed_guids = [c.element.guid for c in diff.changed]
+    report.changed_guids = [e.guid for e in diff.added if not dry_run]  # a dry run adds nothing
+    report.changed_guids += [c.element.guid for c in diff.changed]
     if dry_run:
         for e in diff.added:
             report.add(f"{e.element_id} ({e.ifc_type}): would be added")
@@ -353,7 +354,6 @@ def apply_model(
         for r in removed:
             report.add(f"{r.element_id}: removed in Archicad ({settings.removed_policy})")
         return report
-    report.changed_guids = [e.guid for e in diff.added] + report.changed_guids
 
     root = root_collection(scene, settings.root_collection)
     mapping = settings.material_map()
@@ -382,15 +382,16 @@ def select_objects(view_layer, root_name: str, guids) -> tuple[int, int]:
     (hidden, unselectable, or in an excluded collection). Only the selection changes."""
     guids = list(guids)
     objects = managed_objects(root_name)
-    wanted = [objects[g] for g in guids if g in objects]
     for obj in view_layer.objects:
         obj.select_set(False, view_layer=view_layer)
-    selected = []
-    for obj in wanted:
-        if obj.name in view_layer.objects and obj.visible_get(view_layer=view_layer) \
-                and not obj.hide_select:
-            obj.select_set(True, view_layer=view_layer)
-            selected.append(obj)
+    selected = [
+        obj for obj in (objects[g] for g in guids if g in objects)
+        if obj.name in view_layer.objects
+        and obj.visible_get(view_layer=view_layer)
+        and not obj.hide_select
+    ]
+    for obj in selected:
+        obj.select_set(True, view_layer=view_layer)
     if selected:
         view_layer.objects.active = selected[0]
     return len(selected), len(guids) - len(selected)

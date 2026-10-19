@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Compare an IFC export with what the Blender scene already holds, by Archicad GUID."""
 
 from __future__ import annotations

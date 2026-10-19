@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Apply an IFC model to the Blender scene. All bpy work happens here.
 
 Bookkeeping lives in custom properties on the objects the tool creates:

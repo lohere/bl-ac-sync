@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """AC-Blender Sync core: Archicad (Tapir) -> IFC -> mesh data, independent of Blender."""
 
 from .collision import ExcludedMaterial, MaterialFlagSwitch, reexport_including, restore_pending

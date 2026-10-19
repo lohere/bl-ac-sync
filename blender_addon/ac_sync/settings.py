@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Per-scene settings. They are saved in the .blend, so every project keeps its own."""
 
 import bpy

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """AC Sync: update Archicad geometry in Blender without losing your work."""
 
 from . import _bootstrap

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Completeness check: did everything Archicad has actually arrive in the IFC?
 
 The IFC export silently leaves elements out for reasons the user may not know: hidden layers

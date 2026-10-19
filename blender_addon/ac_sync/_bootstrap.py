@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Small helpers that run before the rest of the add-on is imported.
 
 The core library is a plain sub-package of this extension (``ac_sync.acsync``), so nothing

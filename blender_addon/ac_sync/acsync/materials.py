@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Mapping Archicad surface names to the user's own Blender materials."""
 
 from __future__ import annotations

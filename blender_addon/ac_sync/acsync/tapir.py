@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Minimal client for the Archicad JSON API and the Tapir add-on.
 
 Archicad listens on ``http://127.0.0.1:<port>`` (default 19723). Official commands are posted

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Operators: sync (threaded), connection refresh, material map, report."""
 
 from __future__ import annotations

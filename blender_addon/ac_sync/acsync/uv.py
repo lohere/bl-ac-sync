@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """UV generation. IFC carries no texture coordinates, so textured materials need them made up.
 
 Each face is projected onto its own plane, in world metres, so a texture keeps its real-world

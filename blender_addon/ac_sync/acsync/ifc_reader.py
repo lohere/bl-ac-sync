@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Read an Archicad IFC export into plain Python records (no Blender needed).
 
 Matching key is the Archicad element GUID, which Archicad writes into the IFC ``Tag``

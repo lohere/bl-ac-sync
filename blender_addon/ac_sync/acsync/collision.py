@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Building materials that Archicad's IFC export skips: "Participates in Collision Detection" off.
 
 The usual IFC translators have "Export geometries that participate in Collision Detection

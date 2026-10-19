@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """N-panel (3D viewport sidebar, tab 'AC Sync')."""
 
 import bpy

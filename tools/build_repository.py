@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Build a Blender *extension repository* (a folder of zips plus ``index.json``).
 
     python tools/build_repository.py [--repo-dir dist/repository] [--version X.Y.Z]

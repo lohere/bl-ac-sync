@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Build the installable Blender extension (a .zip).
 
     python tools/build_extension.py [--blender PATH] [--python-version 3.13]

@@ -24,6 +24,7 @@ from .materials import MaterialMap
 from .tapir import (
     DEFAULT_SCOPE,
     DEFAULT_TRANSLATOR,
+    PARTIAL_SCOPES,
     ArchicadInfo,
     PortStatus,
     TapirClient,
@@ -40,6 +41,7 @@ __all__ = [
     "DEFAULT_EXCLUDED_TYPES",
     "DEFAULT_SCOPE",
     "DEFAULT_TRANSLATOR",
+    "PARTIAL_SCOPES",
     "AcSyncError",
     "ArchicadInfo",
     "Change",

@@ -44,8 +44,15 @@ class Diff:
         )
 
 
-def compute_diff(elements: Mapping[str, Element], scene: Mapping[str, SceneRecord]) -> Diff:
-    """``elements`` and ``scene`` are both keyed by Archicad GUID."""
+def compute_diff(
+    elements: Mapping[str, Element],
+    scene: Mapping[str, SceneRecord],
+    detect_removed: bool = True,
+) -> Diff:
+    """``elements`` and ``scene`` are both keyed by Archicad GUID.
+
+    With ``detect_removed`` off (a partial export, e.g. only the selection) an element missing
+    from ``elements`` says nothing about Archicad, so nothing is reported as removed."""
     diff = Diff()
     for guid, element in elements.items():
         record = scene.get(guid)
@@ -59,6 +66,6 @@ def compute_diff(elements: Mapping[str, Element], scene: Mapping[str, SceneRecor
         else:
             diff.unchanged.append(element)
     for guid, record in scene.items():
-        if guid not in elements:
+        if detect_removed and guid not in elements:
             diff.removed.append(record)
     return diff

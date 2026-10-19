@@ -74,7 +74,8 @@ When a new version is published, Blender shows an **Update** button next to AC S
    answering).
 2. In Blender, open the sidebar (**N**) and the **AC Sync** tab.
 3. Click the small **refresh icon** next to "Archicad". You should see your project name.
-4. Click **Dry run** to preview, or **Sync** to import.
+4. Click **Dry run** to preview, or **Sync** to import. Tick **Select changed objects** to have the
+   added and changed objects selected afterwards (or press **Select changed** under Last result).
 5. Look at **Last result** in the panel. If the tool says elements did not arrive, press
    **Copy report** to see which ones and why.
 
@@ -96,7 +97,7 @@ After a design change in Archicad, just press **Sync** again.
 | Geometry of an element that changed in Archicad | **Replaced** with the new shape. |
 | UV maps on a changed element | **Replaced** (the tool makes its own). |
 | Edits you made in Edit Mode on a synced object | **Lost** when that element changes in Archicad. Do detail work with modifiers or on a copy. |
-| Elements deleted in Archicad | Moved to an `AC_Sync - Removed` collection (you can change this to hide, keep, or delete). |
+| Elements deleted in Archicad | Moved to an `AC_Sync - Removed` collection (you can change this to hide, keep, or delete). Not checked when only part of the model is exported (selection or one story). |
 
 Each object remembers which Archicad element it came from, so renaming or moving it in Blender is
 fine.

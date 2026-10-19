@@ -15,6 +15,7 @@ from bpy.types import Operator
 from . import engine
 from .acsync import (
     DEFAULT_EXCLUDED_TYPES,
+    PARTIAL_SCOPES,
     AcSyncError,
     Completeness,
     IfcModel,
@@ -44,6 +45,7 @@ class ConnectionState:
 
 connection = ConnectionState()
 last_completeness: Completeness | None = None  # result of the last Archicad sync (not saved)
+last_changed: list[str] = []  # GUIDs of the objects the last sync/dry run added or changed
 _busy = threading.Event()
 _stage = {"text": ""}
 
@@ -156,6 +158,7 @@ def _snapshot(settings) -> dict:
         "last_port": settings.last_port,
         "translator": settings.translator,
         "scope": settings.scope,
+        "partial": settings.source == "ARCHICAD" and settings.scope in PARTIAL_SCOPES,
         "skip_spaces": settings.skip_spaces,
         "skip_openings": settings.skip_openings,
         "skip_site": settings.skip_site,
@@ -261,7 +264,10 @@ class ACSYNC_OT_sync(Operator):
         if job.port:
             settings.last_port = job.port  # tried first next time
         try:
-            report = engine.apply_model(scene, settings, job.model, dry_run=self.dry_run)
+            report = engine.apply_model(
+                scene, settings, job.model, dry_run=self.dry_run,
+                detect_removed=not job.params["partial"],
+            )
         except Exception as exc:
             self.report({"ERROR"}, f"Applying the model failed: {type(exc).__name__}: {exc}")
             return {"CANCELLED"}
@@ -277,7 +283,10 @@ class ACSYNC_OT_sync(Operator):
             target = report.warnings if not check.ok else report.lines
             target.extend(check.lines())
         _store_report(settings, report, job.project)
+        last_changed[:] = report.changed_guids
         self.report({"INFO"}, ("Dry run: " if self.dry_run else "Sync done: ") + report.diff_summary)
+        if settings.select_changed and last_changed:
+            _select_last_changed(self, context)
         return {"FINISHED"}
 
 
@@ -405,6 +414,35 @@ class ACSYNC_OT_select_missing(Operator):
         return {"FINISHED"}
 
 
+def _select_last_changed(op, context) -> bool:
+    settings = context.scene.acsync
+    selected, skipped = engine.select_objects(
+        context.view_layer, settings.root_collection, last_changed
+    )
+    text = f"Selected {selected} changed object(s)"
+    if skipped:
+        text += f"; {skipped} not selectable (hidden, locked or gone)"
+    op.report({"INFO"} if selected else {"WARNING"}, text + ".")
+    return selected > 0
+
+
+class ACSYNC_OT_select_changed(Operator):
+    bl_idname = "acsync.select_changed"
+    bl_label = "Select changed"
+    bl_description = (
+        "Select the objects the last sync or dry run added or changed. "
+        "Only the selection changes, not the scene"
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(last_changed)
+
+    def execute(self, context):
+        return {"FINISHED"} if _select_last_changed(self, context) else {"CANCELLED"}
+
+
 class ACSYNC_OT_apply_material_map(Operator):
     bl_idname = "acsync.apply_material_map"
     bl_label = "Apply material mapping"
@@ -443,6 +481,7 @@ CLASSES = (
     ACSYNC_OT_apply_material_map,
     ACSYNC_OT_copy_report,
     ACSYNC_OT_select_missing,
+    ACSYNC_OT_select_changed,
 )
 
 

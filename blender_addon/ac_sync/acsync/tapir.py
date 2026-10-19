@@ -41,6 +41,12 @@ EXPORT_SCOPES = (
     "VisibleElementsOnCurrentStory",
     "SelectedElementsOnly",
 )
+# These exports leave out elements that still exist, so a missing element proves nothing.
+PARTIAL_SCOPES = (
+    "AllElementsOnCurrentStory",
+    "VisibleElementsOnCurrentStory",
+    "SelectedElementsOnly",
+)
 
 _ERR_MODAL_DIALOG = 4001
 _ERR_COMMAND_NOT_FOUND = (2002, 4010)

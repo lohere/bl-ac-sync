@@ -110,6 +110,12 @@ class ACSyncSettings(PropertyGroup):
         "arrive in the IFC, and why",
         default=True,
     )
+    select_changed: BoolProperty(
+        name="Select changed objects",
+        description="After a sync or dry run, select the objects that were added or changed "
+        "(only the selection changes, a dry run still leaves the scene as it is)",
+        default=False,
+    )
     keep_ifc: BoolProperty(
         name="Keep IFC file", description="Do not delete the temporary IFC export", default=False
     )

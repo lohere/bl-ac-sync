@@ -69,6 +69,7 @@ class Report:
     warnings: list[str] = field(default_factory=list)
     created_materials: list[str] = field(default_factory=list)
     missing_materials: list[str] = field(default_factory=list)
+    changed_guids: list[str] = field(default_factory=list)  # new or changed (would be, if dry)
 
     def add(self, text: str):
         self.lines.append(text)
@@ -319,21 +320,29 @@ def _handle_removed(record, obj, policy, root, report):
         report.add(f"{label}: removed in Archicad, left untouched")
 
 
-def plan(scene, settings, model: IfcModel) -> tuple[Diff, dict[str, bpy.types.Object]]:
+def plan(
+    scene, settings, model: IfcModel, detect_removed: bool = True
+) -> tuple[Diff, dict[str, bpy.types.Object]]:
     objects = managed_objects(settings.root_collection)
     records = scene_records(objects, tuple(settings.offset), model.uv_scale)
-    return compute_diff(model.elements, records), objects
+    return compute_diff(model.elements, records, detect_removed), objects
 
 
-def apply_model(scene, settings, model: IfcModel, dry_run: bool = False) -> Report:
+def apply_model(
+    scene, settings, model: IfcModel, dry_run: bool = False, detect_removed: bool = True
+) -> Report:
+    """``detect_removed`` is off for partial exports (selection, one story): objects missing
+    from such a model are simply outside it, not deleted in Archicad."""
     report = Report(dry_run=dry_run)
     for w in model.warnings:
         report.warnings.append(w)
-    diff, objects = plan(scene, settings, model)
+    diff, objects = plan(scene, settings, model, detect_removed)
     removed = [r for r in diff.removed if not objects[r.guid].get(PROP_REMOVED)]
     report.diff_summary = diff.summary().replace(
-        f"{len(diff.removed)} removed", f"{len(removed)} removed"
+        f"{len(diff.removed)} removed",
+        f"{len(removed)} removed" if detect_removed else "removals not checked (partial export)",
     )
+    report.changed_guids = [c.element.guid for c in diff.changed]
     if dry_run:
         for e in diff.added:
             report.add(f"{e.element_id} ({e.ifc_type}): would be added")
@@ -343,6 +352,7 @@ def apply_model(scene, settings, model: IfcModel, dry_run: bool = False) -> Repo
         for r in removed:
             report.add(f"{r.element_id}: removed in Archicad ({settings.removed_policy})")
         return report
+    report.changed_guids = [e.guid for e in diff.added] + report.changed_guids
 
     root = root_collection(scene, settings.root_collection)
     mapping = settings.material_map()
@@ -362,6 +372,27 @@ def apply_model(scene, settings, model: IfcModel, dry_run: bool = False) -> Repo
 
     settings.sync_surfaces(model.surface_names())
     return report
+
+
+def select_objects(view_layer, root_name: str, guids) -> tuple[int, int]:
+    """Replace the Blender selection with the synced objects for ``guids``.
+
+    Returns (selected, skipped); skipped are objects that no longer exist or cannot be selected
+    (hidden, unselectable, or in an excluded collection). Only the selection changes."""
+    guids = list(guids)
+    objects = managed_objects(root_name)
+    wanted = [objects[g] for g in guids if g in objects]
+    for obj in view_layer.objects:
+        obj.select_set(False, view_layer=view_layer)
+    selected = []
+    for obj in wanted:
+        if obj.name in view_layer.objects and obj.visible_get(view_layer=view_layer) \
+                and not obj.hide_select:
+            obj.select_set(True, view_layer=view_layer)
+            selected.append(obj)
+    if selected:
+        view_layer.objects.active = selected[0]
+    return len(selected), len(guids) - len(selected)
 
 
 def apply_material_map(settings) -> tuple[int, list[str]]:

@@ -66,6 +66,7 @@ class ACSYNC_PT_main(_Base, Panel):
         op.dry_run = False
         op = row.operator("acsync.sync", text="Dry run", icon="VIEWZOOM")
         op.dry_run = True
+        layout.prop(s, "select_changed")
         if busy:
             layout.label(text=operators._stage["text"] or "Working...", icon="TIME")
 
@@ -73,6 +74,12 @@ class ACSYNC_PT_main(_Base, Panel):
             box = layout.box()
             box.label(text="Last result", icon="TEXT")
             _lines(box, s.last_summary)
+            if operators.last_changed:
+                box.operator(
+                    "acsync.select_changed",
+                    text=f"Select changed ({len(operators.last_changed)})",
+                    icon="RESTRICT_SELECT_OFF",
+                )
             if s.last_check:
                 _lines(box, s.last_check, icon="CHECKMARK" if s.last_check_ok else "ERROR")
                 if operators.last_completeness and operators.last_completeness.unexplained:

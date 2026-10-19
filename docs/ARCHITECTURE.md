@@ -78,7 +78,8 @@ added later on top of the same core.
   overwritten. "Apply material mapping" only switches materials the tool created itself.
 - A changed model offset is treated as a geometry change for every object.
 - Removed elements: move to `<root> - Removed` (default), hide, report only, or delete.
-  A removed element that comes back is restored.
+  A removed element that comes back is restored. Partial exports (selection, one story) cannot
+  prove an element is gone, so they skip removal detection (`detect_removed=False`).
 - The core is a sub-package of the extension and ifcopenshell ships as a wheel listed in the
   manifest, so Blender installs everything itself. Verified by installing the built zip into a clean
   Blender profile; Blender's extension checker reports no policy violations.

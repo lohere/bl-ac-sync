@@ -32,6 +32,14 @@ def test_unchanged_changed_removed():
     assert [r.guid for r in diff.removed] == ["gone"]
 
 
+def test_partial_export_does_not_report_removals():
+    elements = {"a": element("a")}
+    scene = {"a": SceneRecord("a", "WALL-0001", "h1"), "b": SceneRecord("b", "WALL-0002", "y")}
+    assert [r.guid for r in compute_diff(elements, scene).removed] == ["b"]
+    partial = compute_diff(elements, scene, detect_removed=False)
+    assert not partial.removed and [e.guid for e in partial.unchanged] == ["a"]
+
+
 def test_relabel_only_is_not_a_geometry_change():
     elements = {"a": element("a", element_id="WALL-0100", geometry_hash="x")}
     scene = {"a": SceneRecord("a", "WALL-0001", "x")}

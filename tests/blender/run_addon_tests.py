@@ -17,7 +17,8 @@ sys.path.insert(0, os.path.join(ROOT, "tests"))
 
 import ac_sync
 import bpy
-from ac_sync import engine
+from ac_sync import engine, operators
+from ac_sync.acsync import read_ifc
 from ifc_fixture import DUP_ID, SLAB_GUID, WALL_GUID, WINDOW_GUID
 
 TMP = tempfile.mkdtemp(prefix="acsync_test_")
@@ -156,6 +157,77 @@ def test_removed_element_policies():
     sync(s, ifc("nowin"))
     assert WINDOW_GUID not in objs()
     assert not [m for m in bpy.data.meshes if m.name.startswith("WNDW")]
+
+
+def selected_guids():
+    return {g for g, o in objs().items() if o.select_get()}
+
+
+def test_partial_export_never_reports_removals():
+    s = fresh()
+    sync(s, ifc("a"))
+    # a model with only some elements, like an export of the Archicad selection
+    report = engine.apply_model(
+        bpy.context.scene, s, read_ifc(ifc("nowin")), detect_removed=False
+    )
+    assert "removals not checked" in report.diff_summary, report.diff_summary
+    win = objs()[WINDOW_GUID]
+    assert not win.get("acsync_removed")
+    assert win.users_collection[0].name == "AC_Sync - Windows"
+    # the same model as a complete export does mark it as removed
+    assert "1 removed" in engine.apply_model(
+        bpy.context.scene, s, read_ifc(ifc("nowin")), dry_run=True
+    ).diff_summary
+
+
+def test_selection_and_story_scopes_are_partial_only_for_archicad():
+    s = fresh()
+    assert operators._snapshot(s)["partial"] is False  # IFC file: cannot know, behaves as before
+    s.source = "ARCHICAD"
+    for scope, partial in (
+        ("SelectedElementsOnly", True),
+        ("AllElementsOnCurrentStory", True),
+        ("VisibleElementsOnCurrentStory", True),
+        ("VisibleElementsOnAllStories", False),
+        ("EntireProject", False),
+    ):
+        s.scope = scope
+        assert operators._snapshot(s)["partial"] is partial, scope
+
+
+def test_select_changed_after_dry_run_and_sync():
+    s = fresh()
+    sync(s, ifc("a"))
+    assert set(operators.last_changed) == set(objs())  # first sync: everything is new
+    for o in bpy.context.view_layer.objects:
+        o.select_set(False)
+    sync(s, ifc("b"), dry=True)
+    assert operators.last_changed == [WALL_GUID]
+    assert not selected_guids()  # off by default: a dry run leaves the selection alone
+    assert bpy.ops.acsync.select_changed() == {"FINISHED"}
+    assert selected_guids() == {WALL_GUID}
+    assert bpy.context.view_layer.objects.active is objs()[WALL_GUID]
+    lo, hi = zrange(objs()[WALL_GUID])
+    assert abs(hi - lo - 3.5) > 1e-3  # the dry run changed nothing
+
+    for o in bpy.context.view_layer.objects:
+        o.select_set(False)
+    s.select_changed = True
+    sync(s, ifc("b"))
+    assert selected_guids() == {WALL_GUID}
+    sync(s, ifc("b"))  # nothing changed: the selection is left as the user had it
+    assert operators.last_changed == [] and selected_guids() == {WALL_GUID}
+
+
+def test_select_changed_skips_hidden_objects():
+    s = fresh()
+    sync(s, ifc("a"))
+    objs()[WALL_GUID].hide_set(True)
+    selected, skipped = engine.select_objects(
+        bpy.context.view_layer, ROOT_NAME, [WALL_GUID, SLAB_GUID, "gone"]
+    )
+    assert (selected, skipped) == (1, 2)
+    assert selected_guids() == {SLAB_GUID}
 
 
 def test_duplicate_element_ids_are_two_objects():

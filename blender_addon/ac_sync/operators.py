@@ -23,6 +23,8 @@ from .acsync import (
     check_completeness,
     discovery_error,
     read_ifc,
+    reexport_including,
+    restore_pending,
     scan_ports,
 )
 from .acsync.tapir import DEFAULT_PORT
@@ -105,7 +107,45 @@ class Job:
     project: str = ""
     port: int = 0  # where Archicad was found, remembered in the scene settings
     completeness: Completeness | None = None
+    restored: list[str] = field(default_factory=list)  # leftovers of an interrupted sync, undone
     done: bool = False
+
+
+def _read(ifc_path: str, p: dict) -> IfcModel:
+    return read_ifc(
+        ifc_path,
+        excluded_types=_excluded_types(p),
+        archicad_coordinates=p["archicad_coordinates"],
+        uv_scale=p["uv_scale"],
+    )
+
+
+def _check(client, model: IfcModel, p: dict) -> Completeness:
+    # Terrain can only be compared with the IFC when it is in Archicad coordinates and present.
+    meshes = p["archicad_coordinates"] and not p["skip_site"]
+    return check_completeness(client, model, p["scope"], check_meshes=meshes)
+
+
+def _include_excluded_materials(job: Job, client, info, ifc_path: str, p: dict) -> None:
+    """Export again with collision detection switched on for the materials that cost elements,
+    then put the original settings back. On any Archicad-side problem the first export stays."""
+    first = job.completeness
+    try:
+        model, check, warnings = reexport_including(
+            client,
+            first.excluded_materials,
+            (info.project_path, info.project_name),
+            export=lambda: client.export_ifc(ifc_path, p["translator"], p["scope"]),
+            read=lambda: _read(ifc_path, p),
+            check=lambda m: _check(client, m, p),
+            progress=lambda text: _stage.update(text=text),
+        )
+    except AcSyncError as exc:
+        first.notes.append(f"Could not include the excluded materials ({exc}).")
+        return
+    check.included_materials = [m.name for m in first.excluded_materials]
+    check.notes = warnings + check.notes
+    job.model, job.completeness = model, check
 
 
 def _run_job(job: Job) -> None:
@@ -119,6 +159,7 @@ def _run_job(job: Job) -> None:
             job.port = client.port
             info = client.require_tapir_version()
             job.project = info.project_name
+            job.restored = restore_pending(client, info.project_path)
             _stage["text"] = f"Archicad is exporting '{info.project_name}'..."
             stamp = time.strftime("%Y%m%d-%H%M%S")
             temp_path = os.path.join(tempfile.gettempdir(), "acsync", f"export-{stamp}.ifc")
@@ -130,15 +171,12 @@ def _run_job(job: Job) -> None:
                 raise AcSyncError("Choose an IFC file first.")
             job.project = os.path.basename(ifc_path)
         _stage["text"] = "Reading geometry..."
-        job.model = read_ifc(
-            ifc_path,
-            excluded_types=_excluded_types(p),
-            archicad_coordinates=p["archicad_coordinates"],
-            uv_scale=p["uv_scale"],
-        )
+        job.model = _read(ifc_path, p)
         if p["source"] == "ARCHICAD" and p["check_completeness"]:
             _stage["text"] = "Checking completeness..."
-            job.completeness = check_completeness(client, job.model, p["scope"])
+            job.completeness = _check(client, job.model, p)
+            if p["include_excluded"] and job.completeness.excluded_materials:
+                _include_excluded_materials(job, client, info, temp_path, p)
     except Exception as exc:  # reported to the user on the main thread
         job.error = exc
     finally:
@@ -165,6 +203,7 @@ def _snapshot(settings) -> dict:
         "archicad_coordinates": settings.archicad_coordinates,
         "uv_scale": settings.uv_scale if settings.generate_uvs else None,
         "check_completeness": settings.check_completeness,
+        "include_excluded": settings.include_excluded_materials,
         "keep_ifc": settings.keep_ifc,
     }
 
@@ -273,12 +312,15 @@ class ACSYNC_OT_sync(Operator):
             return {"CANCELLED"}
         if job.note:
             report.warnings.insert(0, job.note)
+        report.warnings[:0] = job.restored
         check = job.completeness
         global last_completeness
         last_completeness = check
         settings.last_check = check.summary() if check and check.checked else ""
         settings.last_check_ok = bool(check is None or not check.checked or check.ok)
-        if check is not None and check.checked and check.missing:
+        if check is not None and check.checked and (
+            check.missing or check.excluded_materials or check.included_materials or check.notes
+        ):
             # Unexpected gaps are warnings; hidden-in-Archicad ones are only information.
             target = report.warnings if not check.ok else report.lines
             target.extend(check.lines())
@@ -298,6 +340,7 @@ class Check:
     info: object | None = None
     translators: list[str] = field(default_factory=list)
     note: str = ""
+    restored: list[str] = field(default_factory=list)
     error: Exception | None = None
     done: bool = False
 
@@ -309,6 +352,7 @@ def _run_check(check: Check) -> None:
         client, check.note = _pick_client(check.port, check.hint)
         check.found_port = client.port
         check.info = client.require_tapir_version()
+        check.restored = restore_pending(client, check.info.project_path)
         check.translators = client.list_ifc_translators()
     except Exception as exc:
         check.error = exc
@@ -379,7 +423,7 @@ class ACSYNC_OT_refresh(Operator):
         connection.project = info.project_name or "untitled"
         connection.details = f"Archicad {info.archicad_version}, Tapir {info.tapir_version}"
         connection.message = f"{connection.project} - {connection.details}"
-        connection.instances = [check.note] if check.note else []
+        connection.instances = ([check.note] if check.note else []) + check.restored
         if settings.translator not in check.translators:
             self.report(
                 {"WARNING"}, f"Translator '{settings.translator}' not found in this project."

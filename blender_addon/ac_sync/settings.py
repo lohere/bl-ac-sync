@@ -110,6 +110,17 @@ class ACSyncSettings(PropertyGroup):
         "arrive in the IFC, and why",
         default=True,
     )
+    include_excluded_materials: BoolProperty(
+        name="Include excluded materials",
+        description=(
+            "Archicad skips elements whose Building Material does not 'Participate in Collision "
+            "Detection' (the ground often does). When that happens, switch the option on for "
+            "just those materials, export again, and put it back as it was. Changes the open "
+            "Archicad project for the length of the export and costs a second export. "
+            "Needs 'Check completeness'"
+        ),
+        default=False,
+    )
     select_changed: BoolProperty(
         name="Select changed objects",
         description="After a sync or dry run, select the objects that were added or changed "

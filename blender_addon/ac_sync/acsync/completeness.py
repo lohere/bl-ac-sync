@@ -8,7 +8,9 @@ missing: which elements, on which layers, and which of Archicad's visibility fil
 
 The tool reports *what* is missing and which of Archicad's visibility filters hides it; it
 deliberately does not guess a cause for elements that are visible but still not exported (on
-the test model, a collision-detection flag was ruled out for such walls).
+the test model, a collision-detection flag was ruled out for such walls). The one cause it does
+name is a Building Material without "Participates in Collision Detection" (see collision.py),
+because that one is easy to check and hard to find.
 
 Types that cannot be compared by GUID are skipped: Mesh (all meshes are merged into one
 IfcSite), Zone (IfcSpace carries no GUID), Opening (voids).
@@ -17,8 +19,9 @@ IfcSite), Zone (IfcSpace carries no GUID), Opening (voids).
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
+from .collision import ExcludedMaterial, find_excluded
 from .errors import AcSyncError
 from .ifc_reader import IfcModel
 from .tapir import TapirClient
@@ -48,6 +51,7 @@ class MissingElement:
     element_id: str = ""
     layer: str = ""
     reasons: tuple[str, ...] = ()
+    material: str = ""  # excluded Building Material(s) that explain why it was not exported
 
 
 @dataclass
@@ -57,6 +61,9 @@ class Completeness:
     expected: int = 0  # elements Archicad has (of the checked types)
     missing: list[MissingElement] = field(default_factory=list)
     missing_by_type: dict[str, int] = field(default_factory=dict)
+    excluded_materials: list[ExcludedMaterial] = field(default_factory=list)
+    included_materials: list[str] = field(default_factory=list)  # switched on for the export
+    notes: list[str] = field(default_factory=list)  # restore problems and the like
 
     @property
     def unexplained(self) -> list[MissingElement]:
@@ -71,25 +78,56 @@ class Completeness:
     @property
     def ok(self) -> bool:
         """True when nothing unexpected is missing (hidden elements are expected to be absent)."""
-        return self.checked and not self.unexplained
+        return self.checked and not self.unexplained and not self.excluded_materials
+
+    def material_lines(self) -> list[str]:
+        """The collision-detection finding, worded for the panel and the report."""
+        if not self.excluded_materials:
+            return []
+        parts = []
+        for m in self.excluded_materials:
+            what = []
+            if m.elements:
+                what.append(f"{m.elements} element(s)")
+            if m.meshes:
+                what.append(f"{m.meshes} mesh(es)")
+            parts.append(f"'{m.name}' ({', '.join(what)})")
+        return [
+            "Not exported: their Building Material does not 'Participate in Collision Detection': "
+            + ", ".join(parts) + ".",
+            (
+                "Fix: tick that option for the material in Archicad (Options > Element Attributes "
+                "> Building Materials), or turn on 'Include excluded materials' below."
+            ),
+        ]
 
     def summary(self) -> str:
         """One line for the panel."""
         if not self.checked:
             return ""
         if not self.missing:
-            return f"All {self.expected} Archicad elements arrived."
-        if not self.unexplained:
-            return (
+            text = f"All {self.expected} Archicad elements arrived."
+        elif not self.unexplained:
+            text = (
                 f"{len(self.hidden)} hidden element(s) in Archicad were not exported (expected); "
                 "everything visible arrived."
             )
-        text = (
-            f"{len(self.unexplained)} visible element(s) in Archicad were NOT exported by "
-            f"Archicad's IFC export."
-        )
-        if self.hidden:
-            text += f" ({len(self.hidden)} hidden ones are also absent, as expected.)"
+        else:
+            text = (
+                f"{len(self.unexplained)} visible element(s) in Archicad were NOT exported by "
+                f"Archicad's IFC export."
+            )
+            if self.hidden:
+                text += f" ({len(self.hidden)} hidden ones are also absent, as expected.)"
+        if self.excluded_materials:
+            names = ", ".join(f"'{m.name}'" for m in self.excluded_materials)
+            text += f" Excluded from collision detection, so skipped: {names}."
+        if self.included_materials:
+            text += (
+                " Collision detection was switched on for "
+                + ", ".join(f"'{n}'" for n in self.included_materials)
+                + " during the export and restored."
+            )
         return text
 
     def lines(self) -> list[str]:
@@ -97,7 +135,7 @@ class Completeness:
         if not self.checked:
             return [self.note] if self.note else []
         if not self.missing:
-            return [self.summary()]
+            return [self.summary(), *self.material_lines(), *self.notes]
         by_type = ", ".join(f"{n} {t}" for t, n in sorted(self.missing_by_type.items()))
         out = [f"{self.summary()} Missing in total: {len(self.missing)} of {self.expected} ({by_type})."]
         layers = Counter(m.layer for m in self.missing if m.layer)
@@ -106,7 +144,8 @@ class Completeness:
         reasons = Counter(r for m in self.missing for r in m.reasons)
         if reasons:
             out.append("Hidden in Archicad: " + ", ".join(f"{r} ({n})" for r, n in reasons.items()))
-        unexplained = [m for m in self.missing if not m.reasons]
+        out.extend(self.material_lines())
+        unexplained = [m for m in self.missing if not m.reasons and not m.material]
         if unexplained:
             out.append(
                 f"{len(unexplained)} are not hidden by any Archicad filter but were not exported. "
@@ -122,18 +161,24 @@ class Completeness:
             + ", ".join(f"{m.element_id or m.guid[:8]} [{m.archicad_type}]" for m in shown)
             + (" ..." if len(self.missing) > len(shown) else "")
         )
+        out.extend(self.notes)
         return out
 
 
-def check_completeness(client: TapirClient, model: IfcModel, scope: str) -> Completeness:
-    """Compare Archicad's elements with ``model``. Never raises for Archicad-side problems."""
+def check_completeness(
+    client: TapirClient, model: IfcModel, scope: str, check_meshes: bool = False
+) -> Completeness:
+    """Compare Archicad's elements with ``model``. Never raises for Archicad-side problems.
+
+    ``check_meshes`` also looks for terrain Meshes that did not reach the IFC's Site; it needs
+    the model in Archicad coordinates and with the Site included."""
     if scope not in CHECKED_SCOPES:
         return Completeness(
             note="Completeness check skipped (only done for 'Entire project' and "
             "'Visible, all stories')."
         )
     try:
-        return _check(client, model)
+        return _check(client, model, check_meshes)
     except AcSyncError as exc:
         return Completeness(note=f"Completeness check failed: {exc}")
 
@@ -146,7 +191,7 @@ def _guids(client: TapirClient, element_type: str, filters: list[str] | None = N
     return [e["elementId"]["guid"].upper() for e in response.get("elements", [])]
 
 
-def _check(client: TapirClient, model: IfcModel) -> Completeness:
+def _check(client: TapirClient, model: IfcModel, check_meshes: bool = False) -> Completeness:
     in_ifc = {g.upper() for g in model.elements if not g.startswith("ifc:")}
     result = Completeness(checked=True)
     missing_raw: list[tuple[str, str]] = []  # (guid, archicad type)
@@ -158,6 +203,7 @@ def _check(client: TapirClient, model: IfcModel) -> Completeness:
             result.missing_by_type[element_type] = len(absent)
             missing_raw.extend((g, element_type) for g in absent)
     if not missing_raw:
+        _explain_materials(client, model, result, check_meshes)
         return result
 
     # Why are they hidden in Archicad? Ask the same question with each visibility filter.
@@ -181,7 +227,27 @@ def _check(client: TapirClient, model: IfcModel) -> Completeness:
                 reasons=reasons,
             )
         )
+    _explain_materials(client, model, result, check_meshes)
     return result
+
+
+def _explain_materials(
+    client: TapirClient, model: IfcModel, result: Completeness, check_meshes: bool
+) -> None:
+    """Blame excluded Building Materials where they are the cause. A failure here must not spoil
+    the rest of the check."""
+    candidates = [m.guid for m in result.missing if not m.reasons]
+    try:
+        findings = find_excluded(client, candidates, model, check_meshes)
+    except (AcSyncError, KeyError, IndexError, TypeError) as exc:
+        result.notes.append(f"Could not check the Building Materials: {exc}")
+        return
+    result.excluded_materials = findings.materials
+    result.missing = [
+        replace(m, material=", ".join(findings.by_element[m.guid]))
+        if m.guid in findings.by_element else m
+        for m in result.missing
+    ]
 
 
 def _element_ids(client: TapirClient, guids: list[str]) -> dict[str, str]:

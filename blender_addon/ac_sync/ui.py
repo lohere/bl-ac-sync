@@ -67,6 +67,15 @@ class ACSYNC_PT_main(_Base, Panel):
         op = row.operator("acsync.sync", text="Dry run", icon="VIEWZOOM")
         op.dry_run = True
         layout.prop(s, "select_changed")
+        check = operators.last_completeness
+        if s.source == "ARCHICAD" and check is not None and check.excluded_materials:
+            box = layout.box()
+            box.alert = True
+            box.label(text="Skipped by Archicad", icon="ERROR")
+            for line in check.material_lines():
+                _lines(box, line)
+            if not s.include_excluded_materials:
+                box.prop(s, "include_excluded_materials")
         if busy:
             layout.label(text=operators._stage["text"] or "Working...", icon="TIME")
 
@@ -144,6 +153,9 @@ class ACSYNC_PT_advanced(_Base, Panel):
         col = self.layout.column()
         col.prop(s, "port")
         col.prop(s, "check_completeness")
+        sub = col.column()
+        sub.active = s.check_completeness
+        sub.prop(s, "include_excluded_materials")
         col.prop(s, "keep_ifc")
         col.separator()
         col.label(text=f"AC Sync {__version__}")

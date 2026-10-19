@@ -1,5 +1,6 @@
 """AC-Blender Sync core: Archicad (Tapir) -> IFC -> mesh data, independent of Blender."""
 
+from .collision import ExcludedMaterial, MaterialFlagSwitch, reexport_including, restore_pending
 from .completeness import Completeness, MissingElement, check_completeness
 from .diff import Change, Diff, SceneRecord, compute_diff
 from .errors import (
@@ -49,8 +50,10 @@ __all__ = [
     "Completeness",
     "Diff",
     "Element",
+    "ExcludedMaterial",
     "IfcModel",
     "IfcReadError",
+    "MaterialFlagSwitch",
     "MaterialMap",
     "MissingElement",
     "ModalDialogOpenError",
@@ -70,5 +73,7 @@ __all__ = [
     "find_instances",
     "inspect_port",
     "read_ifc",
+    "reexport_including",
+    "restore_pending",
     "scan_ports",
 ]

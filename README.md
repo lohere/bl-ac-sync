@@ -124,6 +124,12 @@ UV** node to the image texture.
   "Participates in Collision Detection", and elements that have no geometry. The report tells you
   what is missing after every sync. **Select in Archicad** (a button next to the result) selects the
   missing elements in Archicad so you can look at them.
+- **Ground or context missing?** Archicad's default IFC export skips everything whose Building
+  Material does not have *Participates in Collision Detection* ticked, and some materials (ground,
+  air gaps) come with it off. The tool detects this and shows a red box naming the materials. Tick
+  the option for the material in Archicad, or turn on **Include excluded materials** (Advanced):
+  the tool then switches it on for just those materials during the export and restores it right
+  after. Air gaps are only touched if an element is missing because of them.
 - **Terrain arrives as one object** called "Site", even if you drew several Mesh elements.
 - **The model is placed exactly where it is in Archicad.** (Archicad rotates its exported file by
   your Project North angle. The tool undoes that. You can turn this off in **Output**.)

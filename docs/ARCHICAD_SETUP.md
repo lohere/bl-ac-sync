@@ -34,7 +34,7 @@ IFC Translators), start from Reference View and keep the schema on IFC4.
 |---|---|---|
 | Terrain is **one object "Site"** | Archicad merges all Mesh elements into a single IfcSite | Nothing; it is imported as one object. A custom translator that maps Mesh to another IFC class would keep them separate (untested) |
 | Some elements are **missing** | Archicad's IFC export left them out | Read the report after a sync: it lists them, their layers, and whether a hidden layer / Renovation filter explains it |
-| Large context meshes missing | The translator option "Export geometries that participate in Collision Detection only" (Geometry Conversion preset) skips elements whose **Building Material** does not have *Participates in Collision Detection* | Tick that flag on the material (Options > Element Attributes > Building Materials), or use a translator with the option off. Turning it off globally also exports air-gap layers of composites as solid bodies |
+| Large context meshes missing | The translator option "Export geometries that participate in Collision Detection only" (Geometry Conversion preset) skips elements whose **Building Material** does not have *Participates in Collision Detection* | Tick that flag on the material (Options > Element Attributes > Building Materials), or use a translator with the option off. Turning it off globally also exports air-gap layers of composites as solid bodies. AC Sync detects this case and names the material; with *Include excluded materials* (Advanced) it switches the flag on for only those materials during the export and restores it afterwards (see § 6) |
 | Hidden furniture / MEP not imported | Elements on hidden layers are not exported, even with "Entire project" | Show the layer in Archicad before syncing |
 | Model sits **rotated** against Archicad | Archicad writes Project North into the IFC | AC Sync undoes this by default ("Archicad coordinates" in the Output panel). Turn it off only if you want IFC world coordinates |
 | No texture mapping from Archicad | IFC carries no UV coordinates, so Archicad's texture orientation and scale are lost | AC Sync generates its own UVs in real-world scale (Output panel > Generate UVs, "Metres per UV unit"). Set the texture's real size through that scale or the material's mapping node |
@@ -47,3 +47,18 @@ elements that are visible but still missing it does **not** guess a cause; use *
 Archicad** (panel button) to see them. On the test model, 9 such walls/doors turned out to have no
 geometry in Archicad's 3D window at all, so skipping them was correct (the collision flag was ruled
 out). Meshes (merged), zones and openings are not compared.
+
+## 6. "Include excluded materials": what it does to your project
+
+Off by default. When on, and the completeness check finds elements or terrain meshes that the
+export skipped because of a Building Material without *Participates in Collision Detection*:
+
+1. The original settings of exactly those materials are read and saved to a recovery file
+   (`%TEMP%/acsync/pending-restore.json`).
+2. The flag is switched on, Archicad exports again, AC Sync reads that export.
+3. The original settings are written back and read again to check they match.
+
+Only materials that explain something missing are touched: an air gap in a composite wall that
+did arrive stays excluded. The change is not undoable with Ctrl+Z in Archicad, but step 3 undoes
+it, and the next sync or *Check Archicad* finishes step 3 if Blender or Archicad died in between.
+Do not edit Building Materials in Archicad while a sync runs. The sync takes two exports.

@@ -3,6 +3,11 @@
 All notable changes. The project follows [Semantic Versioning](https://semver.org/) once it
 reaches 1.0; until then minor versions may change behaviour.
 
+## 0.1.1
+
+- **New:** a *Help* button next to the version in the panel (Advanced) opens the project page with
+  the instructions.
+
 ## 0.1.0 (first public release)
 
 - **Fixed:** syncing only the Archicad selection or one story no longer marks every other synced

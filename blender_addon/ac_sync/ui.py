@@ -6,6 +6,8 @@ from bpy.types import Menu, Panel, UIList
 
 from . import __version__, operators
 
+HELP_URL = "https://github.com/lohere/AC-Sync#readme"
+
 
 class ACSYNC_UL_surfaces(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
@@ -178,7 +180,10 @@ class ACSYNC_PT_advanced(_Base, Panel):
         sub.prop(s, "include_excluded_materials")
         col.prop(s, "keep_ifc")
         col.separator()
-        col.label(text=f"bl-ac sync {__version__}")
+        row = col.row(align=True)
+        row.label(text=f"bl-ac sync {__version__}")
+        op = row.operator("wm.url_open", text="Help", icon="URL")
+        op.url = HELP_URL
 
 
 def _lines(layout, text: str, icon: str = "NONE") -> None:

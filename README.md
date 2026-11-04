@@ -2,6 +2,8 @@
 
 **Update your Archicad model in Blender with one click.**
 
+A free, open-source Blender add-on that brings your Archicad model into Blender and keeps it up to date. Built for architects and students who render, present or animate their Archicad projects in Blender. Works with Archicad 29 through the free Tapir add-on.
+
 ---
 
 # Usage
@@ -13,6 +15,10 @@ After you open the sidebar (N) in Blender and find the bl-ac tool, press **Sync*
 - A report tells you if something in Archicad did not make it across, and why
 
 The tool is free and open source.
+
+### Why not just export an IFC or FBX file and import it?
+
+You can, but every design change means exporting and importing again, and the new import replaces everything you set up in Blender: materials, modifiers, names, collections. bl-ac sync matches each object to its Archicad element, so a re-sync changes only the geometry that changed and keeps your Blender work.
 
 ---
 

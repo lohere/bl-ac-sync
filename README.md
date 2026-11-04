@@ -18,10 +18,10 @@ The tool is free and open source.
 
 ## What you need
 
-|  |  |
+| You need | Notes |
 | --- | --- |
 | **Archicad 29** | Other versions are untested. The project must be open while you sync. |
-| **Tapir** (free Archicad add-on) | Lets other programs talk to Archicad. Version **1.7.1 or newer**. See below. |
+| **Tapir** (free Archicad add-on) | Lets other programs talk to Archicad. Version **1.7.1 or newer**. See Install. |
 | **Blender 5.0 or newer** | Developed and tested on Blender 5.2 LTS. Older versions are not tested. |
 | **Windows** | macOS has not been tested yet. |
 
@@ -37,11 +37,25 @@ The tool is free and open source.
 
 ### 2. bl-ac sync
 
-1. Download `ac_sync-<version>.zip` (do **not** unzip it).
-2. In Blender: **Edit > Preferences > Get Extensions**, open the small menu (top right) and choose **Install from Disk…**, then pick the zip.
-3. Restart Blender if it asks you to.
+**Recommended: install from the extension repository, so Blender can offer updates.**
+
+1. In Blender: **Edit > Preferences > Get Extensions**.
+2. Open the small arrow menu next to *Repositories* (top right) and choose **Add Remote Repository**.
+3. Paste this address and confirm (Blender may ask you to allow online access):
+
+   ```
+   https://github.com/lohere/bl-ac-sync/releases/latest/download/index.json
+   ```
+
+4. Find **bl-ac sync** in the list and click **Install**.
+
+**Or install from a file:** download `ac_sync-<version>.zip` from the [latest release](https://github.com/lohere/bl-ac-sync/releases/latest) (do **not** unzip it). In **Preferences > Get Extensions** open the small menu (top right), choose **Install from Disk…** and pick the zip. Updates then have to be installed by hand the same way.
 
 You will now find a **bl-ac** tab in the 3D viewport sidebar (press **N**).
+
+### Updating
+
+If you installed from the repository: open **Edit > Preferences > Get Extensions**. When a new version is available, an **Update** button appears next to bl-ac sync (Blender can also check on startup). Click it and the new version is loaded, no restart needed. The version number is shown at the bottom of the **Advanced** panel; if it still shows the old one, restart Blender.
 
 ---
 

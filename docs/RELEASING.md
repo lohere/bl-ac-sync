@@ -2,7 +2,8 @@
 
 How a new version gets to users, and what users do to get it. Everything marked **tested** was run
 in a throwaway Blender profile (`tests/blender/update_flow.py`); items marked **untested** have not
-been tried over the internet yet.
+been tried over the internet yet. Hosting on GitHub release assets and updating through it was tested
+live with 0.1.0 -> 0.1.1.
 
 ## Build
 
@@ -31,25 +32,38 @@ Blender installs it together with the add-on. The zip is about 43 MB.
 
 A repository is static files: `index.json` and the zip next to it (`archive_url` in the index is relative).
 
-- **GitHub release assets (recommended, untested):** attach `index.json` and the zip to a release. Users
-  add `https://github.com/<user>/<repo>/releases/latest/download/index.json`. This keeps the 43 MB zips
-  out of the git history.
+- **GitHub release assets (used, tested live):** attach `index.json` and the zip to a release. Users
+  add `https://github.com/lohere/bl-ac-sync/releases/latest/download/index.json`. This keeps the 43 MB zips
+  out of the git history. Because `latest` always points at the newest release, each release carries
+  an `index.json` that lists only its own zip.
 - **GitHub Pages (untested):** serve `dist/repository/` from a `gh-pages` branch. Simple, but every new
   zip stays in that branch's history forever.
 
 Blender only fetches `index.json` over `https://` or `file://`.
+
+### Publishing a release
+
+After the tests pass and the version is bumped and pushed:
+
+```bash
+python tools/build_repository.py
+gh release create vX.Y.Z dist/repository/ac_sync-X.Y.Z.zip dist/repository/index.json     --repo lohere/bl-ac-sync --target main --title "bl-ac sync X.Y.Z" --notes-file notes.md
+```
+
+Then check that `releases/latest/download/index.json` lists the new version.
 
 ## What users do
 
 - **First time:** Preferences > Get Extensions > Repositories (the small arrow menu) > *Add Remote
   Repository* > paste the `index.json` URL. Install **bl-ac sync** from the list. (Blender may ask to allow
   online access.)
-- **Updates:** Blender shows an **Update** button for the extension (it can also check on startup).
-- **After an update, restart Blender.** Tested in a running session after the files had been updated:
+- **Updates:** Blender shows an **Update** button for the extension (it can also check on startup). Tested live.
+- **No restart needed (tested live, 0.1.0 -> 0.1.1):** after clicking **Update** in Blender's Get Extensions
+  list the new version was active without restarting. The README says to restart only if the old version
+  number still shows. Earlier headless test in a running session, after the files had been replaced on disk:
   - *Refresh* alone: the running Blender keeps the **old** code.
   - *Disable and enable the add-on:* picks up the **new** code and works.
-  A restart is the simple instruction. (A new ifcopenshell version always needs a restart, because compiled
-  libraries cannot be reloaded.)
+  (A new ifcopenshell version will need a restart, because compiled libraries cannot be reloaded.)
 
 ## Test an update locally
 
@@ -71,16 +85,14 @@ Done:
 - [x] `CHANGELOG.md`, version bumped in the manifest, `pyproject.toml` and `acsync/__init__.py`.
 - [x] Tested against a real Archicad project, including a stair and a railing.
 - [x] Final name: **bl-ac sync**. The manifest `id` (`ac_sync`) and package names stay as they are, so
-  updates keep working; a rename of the GitHub repository (`AC-Sync`) is optional and would also need the
-  manifest `website`.
+  updates keep working. The GitHub repository is `lohere/bl-ac-sync` (renamed from `AC-Sync`; the old
+  URL redirects).
+- [x] Version number: 0.1.0 was the first public release.
+- [x] Hosting: GitHub release assets; an update from 0.1.0 to 0.1.1 was tested live over the internet.
 
-Open, in this order:
+Open:
 
-1. **Hosting.** Publish the repository (see above) and test an update over the internet; only
-   `file://` has been tried.
-2. **Platforms.** Windows x64 and Blender 5.0+ only. macOS needs its own ifcopenshell wheel and
+1. **Platforms.** Windows x64 and Blender 5.0+ only. macOS needs its own ifcopenshell wheel and
    someone to test it.
-3. **Version number.** Choose the number of the first public release (for example 0.1.0), and move
-   the changelog entries under it.
-4. **Live-test the optional material switch once more** on the release build, and check Tapir's
+2. **Live-test the optional material switch once more** on the release build, and check Tapir's
    current release for changes to the commands the add-on uses.

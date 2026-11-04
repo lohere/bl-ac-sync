@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "ac_sync"
-version = "0.0.2"
+version = "0.1.0"
 name = "bl-ac sync"
 tagline = "Update Archicad geometry in Blender without losing your work"
 maintainer = "Drotár Bence"

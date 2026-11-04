@@ -3,7 +3,7 @@
 All notable changes. The project follows [Semantic Versioning](https://semver.org/) once it
 reaches 1.0; until then minor versions may change behaviour.
 
-## 0.0.2
+## 0.1.0 (first public release)
 
 - **Fixed:** syncing only the Archicad selection or one story no longer marks every other synced
   object as removed (and, with the default policy, moves it to the Removed collection). Partial

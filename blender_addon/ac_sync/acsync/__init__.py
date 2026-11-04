@@ -40,7 +40,7 @@ from .tapir import (
 )
 from .uv import box_projection_uvs
 
-__version__ = "0.0.2"
+__version__ = "0.1.0"
 
 __all__ = [
     "DEFAULT_EXCLUDED_TYPES",

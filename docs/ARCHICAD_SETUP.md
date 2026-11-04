@@ -1,6 +1,6 @@
 # Archicad setup (read this once)
 
-AC Sync gets geometry out of Archicad through an IFC export that it starts itself. For that to
+bl-ac sync gets geometry out of Archicad through an IFC export that it starts itself. For that to
 work, and to be complete, Archicad needs the following. Everything here was learned on a real
 model (Archicad 29); items marked *unverified* come from Graphisoft's documentation only.
 
@@ -9,14 +9,14 @@ model (Archicad 29); items marked *unverified* come from Graphisoft's documentat
 Tapir is a free, open-source Archicad add-on that lets other programs talk to Archicad.
 Install **version 1.7.1 or newer** from
 <https://github.com/ENZYME-APD/tapir-archicad-automation/releases> and restart Archicad. Older
-versions cannot choose the IFC translator by name; AC Sync will tell you if yours is too old.
+versions cannot choose the IFC translator by name; bl-ac sync will tell you if yours is too old.
 The Windows installer is not code-signed, so Windows may warn you.
 
 ## 2. Keep Archicad ready
 
 - Archicad must be running with the project open.
 - **Close every dialog** (IFC Translators, Attribute Manager, ...). An open dialog blocks all
-  communication and AC Sync reports "A dialog is open in Archicad".
+  communication and bl-ac sync reports "A dialog is open in Archicad".
 - Archicad is busy while it exports; the export of a mid-sized model takes a few seconds.
 
 ## 3. The IFC translator
@@ -34,15 +34,15 @@ IFC Translators), start from Reference View and keep the schema on IFC4.
 |---|---|---|
 | Terrain is **one object "Site"** | Archicad merges all Mesh elements into a single IfcSite | Nothing; it is imported as one object. A custom translator that maps Mesh to another IFC class would keep them separate (untested) |
 | Some elements are **missing** | Archicad's IFC export left them out | Read the report after a sync: it lists them, their layers, and whether a hidden layer / Renovation filter explains it |
-| Large context meshes missing | The translator option "Export geometries that participate in Collision Detection only" (Geometry Conversion preset) skips elements whose **Building Material** does not have *Participates in Collision Detection* | Tick that flag on the material (Options > Element Attributes > Building Materials), or use a translator with the option off. Turning it off globally also exports air-gap layers of composites as solid bodies. AC Sync detects this case and names the material; with *Include excluded materials* (Advanced) it switches the flag on for only those materials during the export and restores it afterwards (see § 6) |
-| Wall ends are **striped** with the wall's own layers (brick, insulation, plaster) where Archicad shows one uniform finish | Archicad's IFC export ignores the wall setting *Inherit end surface* (on by default): the end gets the adjoining wall's finish in Archicad, but the IFC carries the cut layers | AC Sync reproduces the rule (Output > *Match wall end finishes*): the end takes the finish of the neighbour's face that is flush with it (so the side of the neighbour it continues), but only from neighbours that have the setting on too, found by position on the same storey. Walls with an explicit edge surface are skipped. Fitted to 8 observed wall ends of one project; the rule is an inference, see `acsync/endsurface.py` |
+| Large context meshes missing | The translator option "Export geometries that participate in Collision Detection only" (Geometry Conversion preset) skips elements whose **Building Material** does not have *Participates in Collision Detection* | Tick that flag on the material (Options > Element Attributes > Building Materials), or use a translator with the option off. Turning it off globally also exports air-gap layers of composites as solid bodies. bl-ac sync detects this case and names the material; with *Include excluded materials* (Advanced) it switches the flag on for only those materials during the export and restores it afterwards (see § 6) |
+| Wall ends are **striped** with the wall's own layers (brick, insulation, plaster) where Archicad shows one uniform finish | Archicad's IFC export ignores the wall setting *Inherit end surface* (on by default): the end gets the adjoining wall's finish in Archicad, but the IFC carries the cut layers | bl-ac sync reproduces the rule (Output > *Match wall end finishes*): the end takes the finish of the neighbour's face that is flush with it (so the side of the neighbour it continues), but only from neighbours that have the setting on too, found by position on the same storey. Walls with an explicit edge surface are skipped. Fitted to 8 observed wall ends of one project; the rule is an inference, see `acsync/endsurface.py` |
 | Hidden furniture / MEP not imported | Elements on hidden layers are not exported, even with "Entire project" | Show the layer in Archicad before syncing |
-| Model sits **rotated** against Archicad | Archicad writes Project North into the IFC | AC Sync undoes this by default ("Archicad coordinates" in the Output panel). Turn it off only if you want IFC world coordinates |
-| No texture mapping from Archicad | IFC carries no UV coordinates, so Archicad's texture orientation and scale are lost | AC Sync generates its own UVs in real-world scale (Output panel > Generate UVs, "Metres per UV unit"). Set the texture's real size through that scale or the material's mapping node |
+| Model sits **rotated** against Archicad | Archicad writes Project North into the IFC | bl-ac sync undoes this by default ("Archicad coordinates" in the Output panel). Turn it off only if you want IFC world coordinates |
+| No texture mapping from Archicad | IFC carries no UV coordinates, so Archicad's texture orientation and scale are lost | bl-ac sync generates its own UVs in real-world scale (Output panel > Generate UVs, "Metres per UV unit"). Set the texture's real size through that scale or the material's mapping node |
 
 ## 5. What the completeness check does and does not tell you
 
-After each Archicad sync, AC Sync compares the GUIDs of all 3D elements in Archicad with the
+After each Archicad sync, bl-ac sync compares the GUIDs of all 3D elements in Archicad with the
 GUIDs in the IFC. It names what is missing and, for hidden ones, which filter hides them. For
 elements that are visible but still missing it does **not** guess a cause; use **Select in
 Archicad** (panel button) to see them. On the test model, 9 such walls/doors turned out to have no
@@ -56,7 +56,7 @@ export skipped because of a Building Material without *Participates in Collision
 
 1. The original settings of exactly those materials are read and saved to a recovery file
    (`%TEMP%/acsync/pending-restore.json`).
-2. The flag is switched on, Archicad exports again, AC Sync reads that export.
+2. The flag is switched on, Archicad exports again, bl-ac sync reads that export.
 3. The original settings are written back and read again to check they match.
 
 Only materials that explain something missing are touched: an air gap in a composite wall that

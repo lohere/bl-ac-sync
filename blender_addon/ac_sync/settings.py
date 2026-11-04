@@ -81,7 +81,7 @@ class ACSyncSettings(PropertyGroup):
     root_collection: StringProperty(
         name="Collection",
         description="Everything the tool manages lives here; nothing outside is touched",
-        default="AC_Sync",
+        default="bl-ac sync",
     )
     removed_policy: EnumProperty(
         name="Removed elements", items=REMOVED_POLICIES, default="MOVE",

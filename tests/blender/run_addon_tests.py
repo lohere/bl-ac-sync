@@ -23,7 +23,7 @@ from ifc_fixture import DUP_ID, SLAB_GUID, WALL_GUID, WINDOW_GUID
 
 TMP = tempfile.mkdtemp(prefix="acsync_test_")
 FIXTURES = os.environ["ACSYNC_FIXTURE_DIR"]  # built by run.py (needs shapely, so not in Blender)
-ROOT_NAME = "AC_Sync"
+ROOT_NAME = "bl-ac sync"
 
 
 def fresh():
@@ -73,9 +73,9 @@ def test_first_sync_creates_objects_collections_materials():
     assert set(o) == {WALL_GUID, SLAB_GUID, WINDOW_GUID}
     wall = o[WALL_GUID]
     assert wall.name == "WALL-0001" and wall["acsync_id"] == "WALL-0001"
-    assert wall.users_collection[0].name == "AC_Sync - Walls"
-    assert o[WINDOW_GUID].users_collection[0].name == "AC_Sync - Windows"
-    assert bpy.data.collections["AC_Sync - Walls"] in bpy.data.collections[ROOT_NAME].children_recursive
+    assert wall.users_collection[0].name == "bl-ac sync - Walls"
+    assert o[WINDOW_GUID].users_collection[0].name == "bl-ac sync - Windows"
+    assert bpy.data.collections["bl-ac sync - Walls"] in bpy.data.collections[ROOT_NAME].children_recursive
     # wall: 2 materials, faces split between them, geometry in metres
     names = [m.name for m in wall.data.materials]
     assert names == ["Brick - Aged Light", "Stucco - White Fine"], names
@@ -131,9 +131,9 @@ def test_user_work_survives_a_geometry_update():
 
 def test_removed_element_policies():
     for policy, check in (
-        ("MOVE", lambda o, root: o.users_collection[0].name == "AC_Sync - Removed"),
+        ("MOVE", lambda o, root: o.users_collection[0].name == "bl-ac sync - Removed"),
         ("HIDE", lambda o, root: o.hide_get() is True or o.hide_viewport),
-        ("REPORT", lambda o, root: o.users_collection[0].name == "AC_Sync - Windows"),
+        ("REPORT", lambda o, root: o.users_collection[0].name == "bl-ac sync - Windows"),
     ):
         s = fresh()
         s.removed_policy = policy
@@ -149,7 +149,7 @@ def test_removed_element_policies():
         sync(s, ifc("a"))
         win = objs()[WINDOW_GUID]
         assert not win.get("acsync_removed")
-        assert win.users_collection[0].name == "AC_Sync - Windows"
+        assert win.users_collection[0].name == "bl-ac sync - Windows"
         assert not win.hide_get()
     s = fresh()
     s.removed_policy = "DELETE"
@@ -173,7 +173,7 @@ def test_partial_export_never_reports_removals():
     assert "removals not checked" in report.diff_summary, report.diff_summary
     win = objs()[WINDOW_GUID]
     assert not win.get("acsync_removed")
-    assert win.users_collection[0].name == "AC_Sync - Windows"
+    assert win.users_collection[0].name == "bl-ac sync - Windows"
     # the same model as a complete export does mark it as removed
     assert "1 removed" in engine.apply_model(
         bpy.context.scene, s, read_ifc(ifc("nowin")), dry_run=True
@@ -322,7 +322,7 @@ def test_unmapped_material_prefix_and_missing_target_reported():
     sync(s, ifc("a"))
     assert "AC_Brick - Aged Light" in bpy.data.materials
     assert "DoesNotExist" in bpy.data.materials  # created, and listed in the report
-    assert "DoesNotExist" in bpy.data.texts["AC Sync Report"].as_string()
+    assert "DoesNotExist" in bpy.data.texts["bl-ac sync Report"].as_string()
 
 
 def test_bad_inputs_fail_cleanly():
@@ -344,7 +344,7 @@ def test_terrain_site_is_synced_and_skippable():
     sync(s, ifc("terrain"))
     sites = [o for o in objs().values() if o["acsync_type"] == "IfcSite"]
     assert len(sites) == 1 and sites[0].name == "Site"
-    assert sites[0].users_collection[0].name == "AC_Sync - Terrain"
+    assert sites[0].users_collection[0].name == "bl-ac sync - Terrain"
     assert len(sites[0].data.polygons) == 6
     assert "0 added, 0 geometry changed" in sync(s, ifc("terrain"))  # stable on re-sync
     s2 = fresh()
@@ -454,7 +454,7 @@ def test_real_model():
     for ifc_type, label in (("IfcStair", "Stairs"), ("IfcRailing", "Railings")):
         for o in (o for o in objs().values() if o["acsync_type"] == ifc_type):
             assert o.data.polygons, ifc_type
-            assert o.users_collection[0].name == f"AC_Sync - {label}", (ifc_type, o.users_collection)
+            assert o.users_collection[0].name == f"bl-ac sync - {label}", (ifc_type, o.users_collection)
     return f"{n} objects"
 
 

@@ -32,7 +32,7 @@ from .acsync import (
 )
 from .acsync.tapir import DEFAULT_PORT
 
-REPORT_TEXT_NAME = "AC Sync Report"
+REPORT_TEXT_NAME = "bl-ac sync Report"
 
 
 # -- shared UI state (not saved) --------------------------------------------------------------
@@ -299,7 +299,7 @@ class ACSYNC_OT_sync(Operator):
             return self._cancel(context)
         if event.type != "TIMER":
             return {"PASS_THROUGH"}
-        context.workspace.status_text_set(f"AC Sync: {_stage['text']}   (Esc to cancel)")
+        context.workspace.status_text_set(f"bl-ac sync: {_stage['text']}   (Esc to cancel)")
         _redraw(context)
         if not self._job.done:
             return {"RUNNING_MODAL"}
@@ -309,7 +309,7 @@ class ACSYNC_OT_sync(Operator):
     def _cancel(self, context):
         # The worker cannot be interrupted; its result is simply ignored.
         self._cleanup(context)
-        self.report({"WARNING"}, "AC Sync cancelled (Archicad may still finish its export).")
+        self.report({"WARNING"}, "bl-ac sync cancelled (Archicad may still finish its export).")
         return {"CANCELLED"}
 
     def _cleanup(self, context):

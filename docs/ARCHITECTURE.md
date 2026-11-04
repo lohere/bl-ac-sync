@@ -7,7 +7,7 @@ without scripting, and that never destroys the user's Blender work.
 
 ```
 ┌──────────── Archicad 29 ────────────┐        ┌──────────────── Blender ≥ 5.0 ────────────────┐
-│ Tapir add-on (JSON on :19723)       │        │ Extension "AC Sync" (N-panel + preferences)    │
+│ Tapir add-on (JSON on :19723)       │        │ Extension "bl-ac sync" (N-panel + preferences) │
 └───────────────▲─────────────────────┘        │   operators ──► acsync core (bundled)          │
                 │ HTTP/JSON                    │                   ├ tapir client               │
                 └──────────────────────────────┼───────────────────┤ ifc reader (ifcopenshell)  │
@@ -43,7 +43,7 @@ added later on top of the same core.
 
 - Each synced object stores the Archicad **GUID** (and Element ID as a label) in custom
   properties. Matching is by GUID only.
-- Everything the tool manages lives in one root collection (default `AC_Sync`) with
+- Everything the tool manages lives in one root collection (default `bl-ac sync`) with
   sub-collections by element type. **Nothing outside it is read, changed or deleted.**
 - **Changed** element: new vertices/faces are written into the existing mesh datablock, so
   material slots, modifiers, UVs the user added elsewhere, parenting, and names survive.
@@ -52,7 +52,7 @@ added later on top of the same core.
   "check manually".
 - **Added** element: new object in the right sub-collection.
 - **Removed** element: reported; deletion is a setting (default: move to a
-  `AC_Sync – Removed` collection instead of deleting).
+  `bl-ac sync - Removed` collection instead of deleting).
 - **Dry run**: compute and show the diff, change nothing.
 - No blanket orphan purge; only datablocks the tool itself freed are cleaned up.
 - Material mapping table (Archicad surface → Blender material) applied only to slots still
@@ -62,6 +62,7 @@ added later on top of the same core.
 
 | Decision | Why |
 |---|---|
+| Product name "bl-ac sync"; manifest id, package names (`ac_sync`, `acsync`) and operator ids keep the old working name | The id is the extension's identity; changing it would break updates |
 | IFC via Tapir as transport | Free, scriptable, carries GUIDs; Tapir has no mesh command (see RESEARCH.md) |
 | Translator "IFC4 Reference View-based Export" as default, configurable | One mesh per element + GUID + per-face materials, nothing lost (RESEARCH.md §4) |
 | Match on Archicad GUID | Element IDs are duplicated by copy/paste; GUIDs are not |
@@ -113,4 +114,3 @@ added later on top of the same core.
 - Trigger: button first; notification-driven auto-sync later.
 - How to handle stairs, railings, morphs, hotlinked modules (untested).
 - macOS/Linux support (Tapir has a macOS build; ifcopenshell wheels exist) – untested.
-- Final name (AC Sync is a working title).

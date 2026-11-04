@@ -33,7 +33,7 @@ print("translators:", len(s.translators), "| default present:", s.translator in 
 print("dry run:", bpy.ops.acsync.sync("EXEC_DEFAULT", dry_run=True, blocking=True), "|", s.last_summary)
 print("sync:", bpy.ops.acsync.sync("EXEC_DEFAULT", blocking=True), "|", s.last_summary)
 print("completeness:", repr(s.last_check), "| ok:", s.last_check_ok)
-print(bpy.data.texts["AC Sync Report"].as_string())
+print(bpy.data.texts["bl-ac sync Report"].as_string())
 print("select missing:", bpy.ops.acsync.select_missing("EXEC_DEFAULT"))
 print("selected in Archicad:", len(ac_sync.acsync.TapirClient(s.last_port).get_selection()))
 print("objects:", len(ac_sync.engine.managed_objects(s.root_collection)))

@@ -22,6 +22,9 @@ reaches 1.0; until then minor versions may change behaviour.
   using the wall connections from Tapir (Output > *Match wall end finishes*, on by default).
 - Stairs and railings are tested against a real Archicad export.
 - GPL-3.0-or-later license added.
+- **Renamed** to **bl-ac sync** (sidebar tab "bl-ac"). The default collection is now `bl-ac sync`
+  (was `AC_Sync`); an existing scene that used the old name needs its collection renamed, or the
+  *Collection* setting changed back. The extension id stays `ac_sync`.
 
 ## 0.0.1
 

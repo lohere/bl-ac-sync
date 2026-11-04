@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""N-panel (3D viewport sidebar, tab 'AC Sync')."""
+"""N-panel (3D viewport sidebar, tab 'bl-ac')."""
 
 import bpy
 from bpy.types import Menu, Panel, UIList
@@ -36,11 +36,11 @@ class ACSYNC_MT_translators(Menu):
 class _Base:
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "AC Sync"
+    bl_category = "bl-ac"
 
 
 class ACSYNC_PT_main(_Base, Panel):
-    bl_label = "AC Sync"
+    bl_label = "bl-ac sync"
     bl_idname = "ACSYNC_PT_main"
 
     def draw(self, context):
@@ -112,7 +112,7 @@ class ACSYNC_PT_main(_Base, Panel):
                     box.operator("acsync.select_missing", icon="RESTRICT_SELECT_OFF")
             box.operator("acsync.copy_report", icon="COPYDOWN")
             if bpy.data.texts.get(operators.REPORT_TEXT_NAME):
-                _lines(box, "Full report: Text Editor, 'AC Sync Report'")
+                _lines(box, "Full report: Text Editor, 'bl-ac sync Report'")
 
 
 class ACSYNC_PT_output(_Base, Panel):
@@ -178,7 +178,7 @@ class ACSYNC_PT_advanced(_Base, Panel):
         sub.prop(s, "include_excluded_materials")
         col.prop(s, "keep_ifc")
         col.separator()
-        col.label(text=f"AC Sync {__version__}")
+        col.label(text=f"bl-ac sync {__version__}")
 
 
 def _lines(layout, text: str, icon: str = "NONE") -> None:

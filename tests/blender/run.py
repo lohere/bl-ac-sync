@@ -74,12 +74,14 @@ def main():
     build_fixtures()
     env = dict(os.environ, ACSYNC_EXTRA_PATHS=SITE, ACSYNC_FIXTURE_DIR=FIXTURES,
                PYTHONIOENCODING="utf-8")
-    result = subprocess.run(
-        [exe, "--background", "--factory-startup", "--python",
-         os.path.join(HERE, "run_addon_tests.py")],
-        env=env,
-    )
-    sys.exit(result.returncode)
+    code = 0
+    for script in ("run_addon_tests.py", "run_morph_tests.py"):
+        result = subprocess.run(
+            [exe, "--background", "--factory-startup", "--python", os.path.join(HERE, script)],
+            env=env,
+        )
+        code = code or result.returncode
+    sys.exit(code)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,19 @@ from .ifc_reader import (
     read_ifc,
 )
 from .materials import MaterialMap
+from .morphs import MIN_TAPIR_VERSION as MORPH_MIN_TAPIR_VERSION
+from .morphs import (
+    MorphApi,
+    MorphDetails,
+    MorphFace,
+    MorphGeometry,
+    SurfaceInfo,
+    face_size,
+    morph_body,
+    parse_geometry,
+    planar_deviation,
+    polygon_normal,
+)
 from .tapir import (
     DEFAULT_SCOPE,
     DEFAULT_TRANSLATOR,
@@ -40,12 +53,13 @@ from .tapir import (
 )
 from .uv import box_projection_uvs
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 __all__ = [
     "DEFAULT_EXCLUDED_TYPES",
     "DEFAULT_SCOPE",
     "DEFAULT_TRANSLATOR",
+    "MORPH_MIN_TAPIR_VERSION",
     "PARTIAL_SCOPES",
     "UNEXPECTED_ANSWER",
     "AcSyncError",
@@ -63,9 +77,14 @@ __all__ = [
     "MaterialMap",
     "MissingElement",
     "ModalDialogOpenError",
+    "MorphApi",
+    "MorphDetails",
+    "MorphFace",
+    "MorphGeometry",
     "PortStatus",
     "SceneRecord",
     "Skipped",
+    "SurfaceInfo",
     "SurfaceStyle",
     "TapirClient",
     "TapirCommandError",
@@ -77,8 +96,13 @@ __all__ = [
     "check_completeness",
     "compute_diff",
     "discovery_error",
+    "face_size",
     "find_instances",
     "inspect_port",
+    "morph_body",
+    "parse_geometry",
+    "planar_deviation",
+    "polygon_normal",
     "read_ifc",
     "reexport_including",
     "restore_pending",

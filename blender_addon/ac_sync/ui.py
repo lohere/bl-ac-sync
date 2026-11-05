@@ -6,7 +6,7 @@ from bpy.types import Menu, Panel, UIList
 
 from . import __version__, operators
 
-HELP_URL = "https://github.com/lohere/AC-Sync#readme"
+HELP_URL = "https://github.com/lohere/bl-ac-sync#readme"
 
 
 class ACSYNC_UL_surfaces(UIList):

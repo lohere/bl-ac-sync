@@ -1,13 +1,13 @@
 schema_version = "1.0.0"
 
 id = "ac_sync"
-version = "0.1.1"
+version = "0.2.0"
 name = "bl-ac sync"
 tagline = "Update Archicad geometry in Blender without losing your work"
 maintainer = "Drotár Bence"
 type = "add-on"
 
-website = "https://github.com/lohere/AC-Sync"
+website = "https://github.com/lohere/bl-ac-sync"
 tags = ["Import-Export"]
 copyright = ["2026 Drotár Bence"]
 

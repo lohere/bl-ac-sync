@@ -11,9 +11,9 @@ try:
 except ImportError:  # running from a git checkout
     __version__ = "dev"
 
-from . import operators, settings, ui
+from . import morph_ops, morph_ui, operators, settings, ui
 
-_MODULES = (settings, operators, ui)
+_MODULES = (settings, operators, morph_ops, ui, morph_ui)
 
 
 def register():

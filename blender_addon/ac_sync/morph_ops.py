@@ -174,6 +174,26 @@ class ACMORPH_OT_push(_MorphOperator):
         return morph_engine.push(scene, scene.acsync, m, api, objects, self.dry_run)
 
 
+class ACMORPH_OT_detach(Operator):
+    bl_idname = "acmorph.detach"
+    bl_label = "Detach from Archicad"
+    bl_description = (
+        "Forget which Archicad morph the selected objects belong to, so the next push makes "
+        "new morphs. Use it on copies of pushed objects (a copy keeps the link). The existing "
+        "morph in Archicad is not touched"
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(context.selected_objects)
+
+    def execute(self, context):
+        count = morph_engine.detach(context.selected_objects)
+        self.report({"INFO"}, f"Detached {count} object(s)")
+        return {"FINISHED"}
+
+
 class ACMORPH_OT_copy_report(Operator):
     bl_idname = "acmorph.copy_report"
     bl_label = "Copy report"
@@ -189,7 +209,9 @@ class ACMORPH_OT_copy_report(Operator):
         return {"FINISHED"}
 
 
-CLASSES = (ACMorphSettings, ACMORPH_OT_pull, ACMORPH_OT_push, ACMORPH_OT_copy_report)
+CLASSES = (
+    ACMorphSettings, ACMORPH_OT_pull, ACMORPH_OT_push, ACMORPH_OT_detach, ACMORPH_OT_copy_report
+)
 
 
 def register():

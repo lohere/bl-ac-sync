@@ -92,6 +92,14 @@ def test_face_size_is_the_longest_corner_distance():
     assert face_size(ring) == 19.0
 
 
+def test_the_wait_for_archicad_grows_with_the_mesh():
+    from acsync.morphs import request_timeout
+
+    assert request_timeout(0) >= 30
+    assert request_timeout(50_000) >= 75  # 50,000 faces took ~10 s to build; plenty of room
+    assert request_timeout(100_000) > request_timeout(50_000)
+
+
 def test_planar_deviation():
     assert planar_deviation([(0, 0, 0), (1, 0, 0), (1, 1, 5)]) == 0.0  # a triangle is always flat
     assert planar_deviation([(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]) == 0.0

@@ -21,6 +21,7 @@ Facts measured against Archicad 29 with Tapir 1.8.0 (see docs/MORPHS.md):
 from __future__ import annotations
 
 import hashlib
+import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
@@ -30,6 +31,12 @@ from .tapir import TapirClient
 Vec = tuple[float, float, float]
 MIN_TAPIR_VERSION = (1, 8, 0)  # first Tapir with Get3DGeometryOfElements
 CHUNK = 50  # elements per request when reading
+
+
+def request_timeout(faces: int) -> float:
+    """Seconds to wait for Archicad: a 50,000-face morph takes about 10 s to build."""
+    return 30.0 + faces / 1000.0
+
 IDENTITY_AXES = {
     "xAxis": {"x": 1.0, "y": 0.0, "z": 0.0},
     "yAxis": {"x": 0.0, "y": 1.0, "z": 0.0},
@@ -158,11 +165,7 @@ def face_size(points: Sequence[Vec]) -> float:
         lows = [min(p[i] for p in points) for i in range(3)]
         highs = [max(p[i] for p in points) for i in range(3)]
         return sum((h - low) ** 2 for low, h in zip(lows, highs)) ** 0.5
-    best = 0.0
-    for i, a in enumerate(points):
-        for b in points[i + 1:]:
-            best = max(best, sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5)
-    return best
+    return max(math.dist(a, b) for i, a in enumerate(points) for b in points[i + 1:])
 
 
 def planar_deviation(points: Sequence[Vec]) -> float:
@@ -212,7 +215,9 @@ class MorphApi:
     def read(self, guids: Sequence[str]) -> dict[str, MorphGeometry]:
         found: dict[str, MorphGeometry] = {}
         for chunk in _chunks(list(guids), CHUNK):
-            response = self.client.addon("Get3DGeometryOfElements", {"elements": _guid_items(chunk)})
+            response = self.client.addon(
+                "Get3DGeometryOfElements", {"elements": _guid_items(chunk)}, timeout=60.0
+            )
             entries = response.get("geometries3D", [])
             if len(entries) != len(chunk):
                 raise TapirCommandError(
@@ -288,7 +293,10 @@ class MorphApi:
             }
             for geometry, o in items
         ]
-        response = self.client.addon("CreateMorphs", {"morphsData": data})
+        faces = sum(len(g.faces) for g, _o in items)
+        response = self.client.addon(
+            "CreateMorphs", {"morphsData": data}, timeout=request_timeout(faces)
+        )
         elements = response.get("elements", [])
         if len(elements) != len(items):
             raise TapirCommandError(f"CreateMorphs made {len(elements)} of {len(items)} morphs")
@@ -310,7 +318,10 @@ class MorphApi:
             {"elementId": {"guid": guid}, **IDENTITY_AXES, "body": morph_body(geometry, origin)}
             for guid, geometry, origin in items
         ]
-        response = self.client.addon("ModifyMorphs", {"morphsWithDetails": data})
+        faces = sum(len(g.faces) for _guid, g, _o in items)
+        response = self.client.addon(
+            "ModifyMorphs", {"morphsWithDetails": data}, timeout=request_timeout(faces)
+        )
         results = response.get("executionResults", [])
         if len(results) != len(items):
             raise TapirCommandError(f"ModifyMorphs answered {len(results)} of {len(items)} items")

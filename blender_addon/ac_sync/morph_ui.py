@@ -69,6 +69,7 @@ class ACMORPH_PT_options(_Base, Panel):
         col.prop(m, "collection")
         col.prop(m, "apply_modifiers")
         col.prop(m, "flatness")
+        col.operator("acmorph.detach", icon="UNLINKED")
         col.label(text="Offset, port and materials: see bl-ac sync")
 
 

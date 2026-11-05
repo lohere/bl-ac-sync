@@ -41,6 +41,7 @@ PROP_GUID = "acmorph_guid"
 PROP_AC_HASH = "acmorph_ac_hash"
 PROP_BL_HASH = "acmorph_bl_hash"
 PROP_REMOVED = "acmorph_removed"
+BIG_MORPH_FACES = 20_000  # above this the report mentions that Archicad needs a moment
 
 
 # -- collections and objects -----------------------------------------------------------------
@@ -58,6 +59,30 @@ def morph_objects() -> dict[str, bpy.types.Object]:
         if guid:
             found.setdefault(str(guid).upper(), obj)
     return found
+
+
+def shared_guids() -> set[str]:
+    """GUIDs claimed by more than one object. Shift+D copies the custom properties too, so a copy
+    of a pushed object points at the original's morph; syncing either would be a guess."""
+    seen: set[str] = set()
+    shared: set[str] = set()
+    for obj in bpy.data.objects:
+        guid = obj.get(PROP_GUID)
+        if guid:
+            guid = str(guid).upper()
+            (shared if guid in seen else seen).add(guid)
+    return shared
+
+
+def detach(objects) -> int:
+    """Forget the Archicad morph of each object; the next push makes a new one."""
+    count = 0
+    for obj in objects:
+        keys = [k for k in obj.keys() if k.startswith("acmorph_")]  # noqa: SIM118 (an ID, not a dict)
+        for key in keys:
+            del obj[key]
+        count += bool(keys)
+    return count
 
 
 def can_push(obj: bpy.types.Object) -> bool:
@@ -132,7 +157,7 @@ def extract_geometry(
         faces: list[MorphFace] = []
         out = Extracted(MorphGeometry(vertices, faces))
         materials = list(mesh.materials)
-        taken = {tuple(e.key) for e in mesh.edges}  # a new diagonal must not land on one of these
+        taken: set | None = None  # edges in use; built when the first face needs splitting
 
         def use(i: int) -> int:
             if i not in remap:
@@ -151,6 +176,8 @@ def extract_geometry(
             points = [coords[i] for i in idx]
             if len(idx) > 3 and planar_deviation(points) > flatness * face_size(points):
                 out.triangulated += 1
+                if taken is None:  # a new diagonal must not land on an existing edge
+                    taken = {tuple(e.key) for e in mesh.edges}
                 for tri in _triangulate(points, idx, taken):
                     faces.append(MorphFace([use(idx[k]) for k in tri], surface=surface))
             else:
@@ -262,7 +289,7 @@ def write_mesh(obj, geometry: MorphGeometry, surfaces, mapping, offset, report) 
         "material_index", [slot_of[geometry.faces[n].surface] for n in source]
     )
     mesh.update()
-    obj["acsync_slots"] = json.dumps(slots)
+    obj[engine.PROP_SLOTS] = json.dumps(slots)
 
 
 # -- reports ---------------------------------------------------------------------------------
@@ -304,27 +331,30 @@ def pull(scene, settings, msettings, api: MorphApi, dry_run: bool = False) -> en
     wanted = api.selected_morphs() if msettings.pull_scope == "SELECTED" else every_guid
     geometries = api.read(wanted)
     objects = morph_objects()
+    shared = shared_guids()
     depsgraph = evaluated_depsgraph()
-    by_name = api.surface_names()
-    resolve = surface_resolver(settings, {n: g for g, n in by_name.items()})
-    apply_mods = msettings.apply_modifiers
+    resolve = surface_resolver(settings, {n: g for g, n in api.surface_names().items()})
+    flatness = msettings.flatness_ratio()
 
     todo: list[tuple[str, MorphGeometry, bpy.types.Object | None]] = []
     for guid in wanted:
         geometry = geometries[guid]
-        new_hash = geometry.fingerprint()
         obj = objects.get(guid)
         if obj is None:
             todo.append((guid, geometry, None))
             counts.created += 1
             continue
+        if guid in shared:
+            counts.failed += 1
+            report.warnings.append(_shared_warning(guid))
+            continue
         if obj.get(PROP_REMOVED) and not dry_run:
             del obj[PROP_REMOVED]
-        if obj.get(PROP_AC_HASH) == new_hash:
+        if obj.get(PROP_AC_HASH) == geometry.fingerprint():
             counts.unchanged += 1
             continue
         blender_now = extract_geometry(
-            obj, depsgraph, apply_mods, offset, resolve, msettings.flatness_ratio()
+            obj, depsgraph, msettings.apply_modifiers, offset, resolve, flatness
         ).geometry.fingerprint()
         if blender_now != obj.get(PROP_BL_HASH) and msettings.conflict == "SKIP":
             counts.conflicts += 1
@@ -345,15 +375,17 @@ def pull(scene, settings, msettings, api: MorphApi, dry_run: bool = False) -> en
                     obj[PROP_REMOVED] = True
 
     report.diff_summary = counts.summary("new", "changed")
-    if dry_run or not todo:
+    if dry_run:
         for guid, _geometry, obj in todo:
             report.add(f"{obj.name if obj else guid}: would be {'changed' if obj else 'added'}")
+    if dry_run or not todo:
         return report
 
     details = api.details([g for g, _geo, o in todo if o is None])
     infos = api.surface_details({s for _g, geo, _o in todo for s in geo.surface_guids()})
     mapping = settings.material_map()
     collection = morph_collection(scene, msettings.collection)
+    written: list[tuple[str, MorphGeometry, bpy.types.Object]] = []
     for guid, geometry, obj in todo:
         if obj is None:
             d = details.get(guid)
@@ -364,41 +396,65 @@ def pull(scene, settings, msettings, api: MorphApi, dry_run: bool = False) -> en
                 obj.matrix_world = Matrix.Translation(Vector(d.origin) + Vector(offset))
             obj[PROP_GUID] = guid
         write_mesh(obj, geometry, infos, mapping, offset, report)
-        depsgraph = evaluated_depsgraph()
+        written.append((guid, geometry, obj))
+
+    depsgraph = evaluated_depsgraph()  # once for all objects, not once per object
+    for guid, geometry, obj in written:
         obj[PROP_AC_HASH] = geometry.fingerprint()
         obj[PROP_BL_HASH] = extract_geometry(
-            obj, depsgraph, apply_mods, offset, resolve, msettings.flatness_ratio()
+            obj, depsgraph, msettings.apply_modifiers, offset, resolve, flatness
         ).geometry.fingerprint()
         report.changed_guids.append(guid)
     settings.sync_surfaces([i.name for i in infos.values() if i.name])
     return report
 
 
+def _shared_warning(guid: str) -> str:
+    names = ", ".join(
+        sorted(o.name for o in bpy.data.objects if str(o.get(PROP_GUID)).upper() == guid)
+    )
+    return (
+        f"{names} all stand for the same Archicad morph (a copy keeps the link), so they are "
+        "skipped. Select the copy and press 'Detach from Archicad'."
+    )
+
+
 # -- push: Blender -> Archicad ---------------------------------------------------------------
 
 
-def push(scene, settings, msettings, api: MorphApi, objects, dry_run: bool = False) -> engine.Report:
+@dataclass
+class Planned:
+    obj: bpy.types.Object
+    geometry: MorphGeometry
+    fingerprint: str  # of the Blender side, stored after a successful write
+
+
+def push(
+    scene, settings, msettings, api: MorphApi, objects, dry_run: bool = False
+) -> engine.Report:
     report = engine.Report(dry_run=dry_run)
     counts = Counts()
     offset = tuple(settings.offset)
     known = set(api.list_guids())
-    by_name = {n: g for g, n in api.surface_names().items()}
-    resolve = surface_resolver(settings, by_name)
+    resolve = surface_resolver(settings, {n: g for g, n in api.surface_names().items()})
     depsgraph = evaluated_depsgraph()
+    shared = shared_guids()
 
-    creates: list[tuple[bpy.types.Object, MorphGeometry]] = []
-    updates: list[tuple[bpy.types.Object, MorphGeometry]] = []
+    def guid_of(obj) -> str:
+        return str(obj.get(PROP_GUID) or "").upper()
+
+    creates: list[Planned] = []
+    updates: list[Planned] = []
     unmatched: set[str] = set()
-    current: dict[str, MorphGeometry] = {}
-    update_guids = [
-        str(o.get(PROP_GUID)).upper()
-        for o in objects
-        if o.get(PROP_GUID) and str(o.get(PROP_GUID)).upper() in known
-    ]
-    if update_guids:
-        current = api.read(update_guids)
+    existing = [g for g in dict.fromkeys(map(guid_of, objects)) if g in known and g not in shared]
+    current = api.read(existing) if existing else {}
 
     for obj in objects:
+        guid = guid_of(obj)
+        if guid and guid in shared:
+            counts.failed += 1
+            report.warnings.append(_shared_warning(guid))
+            continue
         ex = extract_geometry(
             obj, depsgraph, msettings.apply_modifiers, offset, resolve, msettings.flatness_ratio()
         )
@@ -411,20 +467,25 @@ def push(scene, settings, msettings, api: MorphApi, objects, dry_run: bool = Fal
             report.add(f"{obj.name}: {ex.triangulated} warped face(s) were split into triangles")
         if ex.loose_edges:
             report.add(f"{obj.name}: {ex.loose_edges} edge(s) without a face were not sent")
+        if len(ex.geometry.faces) > BIG_MORPH_FACES:
+            report.add(
+                f"{obj.name}: {len(ex.geometry.faces):,} faces. Archicad needs several seconds "
+                "per 50,000 faces and gets slow with very dense morphs."
+            )
         if ex.overshared_edges:
             report.warnings.append(
                 f"{obj.name}: {ex.overshared_edges} edge(s) border more than two faces. Archicad "
                 "cannot build that and will refuse the morph. Select > Select All by Trait > "
                 "Non Manifold (with 'Multiple Faces') shows them."
             )
-        guid = str(obj.get(PROP_GUID) or "").upper()
+        planned = Planned(obj, ex.geometry, ex.geometry.fingerprint())
         if not guid or guid not in known:
             if guid:
                 report.add(f"{obj.name}: its morph is gone from Archicad, a new one is made")
-            creates.append((obj, ex.geometry))
+            creates.append(planned)
             counts.created += 1
             continue
-        blender_changed = ex.geometry.fingerprint() != obj.get(PROP_BL_HASH)
+        blender_changed = planned.fingerprint != obj.get(PROP_BL_HASH)
         archicad_changed = current[guid].fingerprint() != obj.get(PROP_AC_HASH)
         if not blender_changed and not archicad_changed:
             counts.unchanged += 1
@@ -438,7 +499,7 @@ def push(scene, settings, msettings, api: MorphApi, objects, dry_run: bool = Fal
                 "(set 'If both changed' to Overwrite to replace Archicad's version)"
             )
         else:
-            updates.append((obj, ex.geometry))
+            updates.append(planned)
             counts.updated += 1
 
     if unmatched:
@@ -449,66 +510,71 @@ def push(scene, settings, msettings, api: MorphApi, objects, dry_run: bool = Fal
         )
     report.diff_summary = counts.summary("created", "updated")
     if dry_run:
-        for obj, _g in creates:
-            report.add(f"{obj.name}: would be created in Archicad")
-        for obj, _g in updates:
-            report.add(f"{obj.name}: would be updated in Archicad")
+        report.lines += [f"{p.obj.name}: would be created in Archicad" for p in creates]
+        report.lines += [f"{p.obj.name}: would be updated in Archicad" for p in updates]
         return report
 
-    _write_creates(api, creates, offset, report, counts, msettings, resolve)
-    _write_updates(api, updates, report, counts, msettings, resolve, offset)
+    stored = _write_creates(api, creates, offset, report, counts)
+    stored += _write_updates(api, updates, report, counts)
+    _remember(api, stored, report)
     report.diff_summary = counts.summary("created", "updated")
     return report
 
 
-def _store_sync_state(api, pairs, report, msettings, resolve, offset) -> None:
-    """Remember both sides' fingerprints after a write. The Archicad side is read back, since
-    Archicad may reorder what it was given."""
-    back = api.read([g for _o, g in pairs])
-    depsgraph = evaluated_depsgraph()
-    for obj, guid in pairs:
+def _remember(api, stored: list[tuple[Planned, str]], report) -> None:
+    """Keep both sides' fingerprints after a write. The Archicad side is read back, since
+    Archicad may reorder what it was given. The Blender side did not change by pushing."""
+    if not stored:
+        return
+    back = api.read([guid for _p, guid in stored])
+    for planned, guid in stored:
+        obj = planned.obj
         obj[PROP_GUID] = guid
         if PROP_REMOVED in obj:
             del obj[PROP_REMOVED]
         obj[PROP_AC_HASH] = back[guid].fingerprint()
-        obj[PROP_BL_HASH] = extract_geometry(
-            obj, depsgraph, msettings.apply_modifiers, offset, resolve, msettings.flatness_ratio()
-        ).geometry.fingerprint()
+        obj[PROP_BL_HASH] = planned.fingerprint
         report.changed_guids.append(guid)
 
 
-def _write_creates(api, creates, offset, report, counts, msettings, resolve) -> None:
+def _write_creates(
+    api, creates: list[Planned], offset, report, counts
+) -> list[tuple[Planned, str]]:
     if not creates:
-        return
+        return []
     off = Vector(offset)
-    items = [(geometry, tuple(obj.matrix_world.translation - off)) for obj, geometry in creates]
-    results = api.create(items)
+    items = [(p.geometry, tuple(p.obj.matrix_world.translation - off)) for p in creates]
     done = []
-    for (obj, _geometry), result in zip(creates, results):
+    for planned, result in zip(creates, api.create(items)):
         if isinstance(result, Exception):
             counts.created -= 1
             counts.failed += 1
-            report.warnings.append(f"{obj.name}: Archicad refused the morph ({result})")
+            report.warnings.append(f"{planned.obj.name}: Archicad refused the morph ({result})")
         else:
-            done.append((obj, result))
-    if done:
-        _store_sync_state(api, [(o, g) for o, g in done], report, msettings, resolve, offset)
+            done.append((planned, result))
+    return done
 
 
-def _write_updates(api, updates, report, counts, msettings, resolve, offset) -> None:
+def _write_updates(api, updates: list[Planned], report, counts) -> list[tuple[Planned, str]]:
     if not updates:
-        return
-    guids = [str(o[PROP_GUID]).upper() for o, _g in updates]
+        return []
+    guids = [str(p.obj[PROP_GUID]).upper() for p in updates]
     placements = api.details(guids)
-    items = [(g, geometry, placements[g].origin) for g, (_o, geometry) in zip(guids, updates)]
-    results = api.modify(items)
+    sendable = []
+    for planned, guid in zip(updates, guids):
+        if guid in placements:
+            sendable.append((planned, guid))
+        else:
+            counts.updated -= 1
+            counts.failed += 1
+            report.warnings.append(f"{planned.obj.name}: its morph vanished from Archicad, skipped")
+    results = api.modify([(g, p.geometry, placements[g].origin) for p, g in sendable])
     done = []
-    for (obj, _geometry), guid, error in zip(updates, guids, results):
+    for (planned, guid), error in zip(sendable, results):
         if error is not None:
             counts.updated -= 1
             counts.failed += 1
-            report.warnings.append(f"{obj.name}: Archicad refused the change ({error})")
+            report.warnings.append(f"{planned.obj.name}: Archicad refused the change ({error})")
         else:
-            done.append((obj, guid))
-    if done:
-        _store_sync_state(api, done, report, msettings, resolve, offset)
+            done.append((planned, guid))
+    return done

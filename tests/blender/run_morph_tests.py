@@ -354,6 +354,60 @@ def test_warped_quads_are_split_and_flat_ones_are_kept():
     assert "warped face(s)" in report.text()
 
 
+def test_a_copy_of_a_pushed_object_never_overwrites_the_original_morph():
+    # Shift+D copies custom properties, so the copy claims the original's morph
+    fresh()
+    original = cube("Original")
+    push([original])
+    guid = original[me.PROP_GUID]
+    copy = original.copy()
+    copy.data = original.data.copy()
+    copy.name = "Copy"
+    bpy.context.scene.collection.objects.link(copy)
+    copy.location = (5, 0, 0)
+    bpy.context.view_layer.update()
+    before = ac_vertices(guid)
+    report = push([copy])
+    assert "same Archicad morph" in "\n".join(report.warnings) and "1 failed" in report.diff_summary
+    assert ac_vertices(guid) == before and list(FAKE.morphs) == [guid]
+    assert "same Archicad morph" in "\n".join(pull().warnings)
+    # detaching the copy makes it a morph of its own, and the original keeps its link
+    select_only(copy)
+    assert bpy.ops.acmorph.detach("EXEC_DEFAULT") == {"FINISHED"}
+    assert me.PROP_GUID not in copy and original[me.PROP_GUID] == guid
+    assert "1 created" in push([copy]).diff_summary and len(FAKE.morphs) == 2
+    assert copy[me.PROP_GUID] != guid
+    original.data.vertices[0].co.x -= 1.0
+    original.data.update()
+    assert "1 updated" in push([original]).diff_summary
+
+
+def test_dense_meshes_are_mentioned_but_still_sent():
+    fresh()
+    me.BIG_MORPH_FACES, old = 5, me.BIG_MORPH_FACES
+    try:
+        report = push([cube()])
+    finally:
+        me.BIG_MORPH_FACES = old
+    assert "6 faces. Archicad needs several seconds" in report.text()
+    assert "1 created" in report.diff_summary
+
+
+def test_a_pull_updates_many_objects_with_a_single_scene_update():
+    fresh()
+    for n in range(5):
+        FAKE.add(box_geometry(origin=(float(n * 3), 0.0, 0.0)))
+    updates = []
+    original = me.evaluated_depsgraph
+    me.evaluated_depsgraph = lambda: updates.append(1) or original()
+    try:
+        report = pull()
+    finally:
+        me.evaluated_depsgraph = original
+    assert "5 new" in report.diff_summary
+    assert len(updates) == 2, updates  # once to read the scene, once to fingerprint the results
+
+
 def test_flatness_is_judged_relative_to_the_face_size():
     # Archicad refuses a quad warped by more than ~0.35 % of its size: a 20 cm face warped by
     # under 1 mm is refused, a 5 m face with the same warp is fine.

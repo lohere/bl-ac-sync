@@ -18,7 +18,7 @@ Needs **Tapir 1.8.0 or newer** (the sync from Archicad does not). Status: proof 
 
 Per face it carries the **material** both ways (see below), keeps **n-gons**, concave faces and
 **open meshes** (sent as Archicad *Surface* bodies), and applies **modifiers** by default so an array
-or bevel arrives as plain faces. Warped faces (Archicad faces must be flat) are split into triangles;
+or bevel arrives as plain faces. Faces that are not flat are split into triangles (see *Limits*);
 the report says how many. A mesh with an edge on more than two faces is warned about, since
 Archicad cannot build it. Faces with holes that come from Archicad are split into triangles in Blender.
 
@@ -35,6 +35,11 @@ which side changed:
 
 A morph deleted in Archicad is flagged on its Blender object (`acmorph_removed`), never deleted.
 Pushing such an object makes a new morph.
+
+**Copies.** Duplicating a pushed object (Shift+D) copies the link to its morph as well. Pushing or
+pulling objects that share one morph would be a guess, so they are skipped with a warning. Select the
+copy and press **Detach from Archicad** (Options): it forgets the link, and the next push makes the
+copy a morph of its own. Detaching never touches Archicad.
 
 ## Coordinates and materials
 
@@ -88,20 +93,39 @@ No IFC is involved. The core is in `acsync/morphs.py` (no Blender), the Blender 
   Suzanne, by bisecting the face list against the live Archicad.
 * A refused morph is reported inside the answer (`elements[i].error`), not as a failed request.
 * An unsaved Archicad project has no project name, only `isUntitled`.
-* Speed (local, one request each): 512 faces push in 0.3 s, 4,608 faces in 0.8 s; pulling all 12 test morphs (two of them
-  spheres) takes 1.2 s.
+* Speed, against a real Archicad: 512 faces push in 0.3 s, 4,608 faces in 0.8 s, 8,192 in 1.5 s,
+  49,928 in 9 s (an update of the same mesh: 11 s). Pulling 12 morphs, two of them spheres, takes 1.2 s.
+  The time is mostly Archicad building the body; the Blender side needs about 2 s for 50,000 faces.
+  The wait for Archicad grows with the mesh (30 s plus 1 s per 1,000 faces).
+* The IFC export of the same project lists morphs too, as generic objects (`IfcBuildingElementProxy`)
+  with the same GUID. Open-surface morphs (a single quad, a sheet) are *not* in the IFC at all.
 
 ## Limits
 
+* **Warped faces become triangles.** An Archicad face has to be flat (within about 0.35 % of its size).
+  Every face with more than three corners that is more warped than the *Flatness tolerance* (0.1 % by
+  default) is therefore split into triangles when it is pushed. Flat quads and n-gons (walls, slabs, a
+  box, an L-shaped cap) stay as they are, but curved or organic meshes (sculpts, subdivided shapes,
+  Blender's Suzanne) arrive in Archicad as triangle meshes. That is a property of Archicad's morph,
+  not something the tool can avoid. Consequences:
+  * more faces than in Blender (Suzanne: 500 faces became 934), and the extra diagonal edges may show
+    in Archicad's 3D view (not checked visually); the API cannot hide single edges (see below),
+  * pulling the morph back gives the triangulated mesh, so the quads of the original are gone. The link
+    to the Blender object stays, so later pushes still update the same morph,
+  * editing such a morph in Archicad works on triangles.
 * The Archicad API has no rounding: curved Blender geometry arrives as flat facets. Per-edge
-  smooth/hidden display cannot be set (an Archicad SDK bug); only the default for all edges can.
-* Very dense meshes make Archicad slow; there is no face-count warning yet.
+  smooth/hidden display cannot be set (an Archicad SDK bug); only the default for all edges can, and
+  the tool does not use that yet.
+* Very dense meshes work but are slow: about 9 s for 50,000 faces. The report mentions meshes above
+  20,000 faces.
 * Edges without faces are not sent. UVs are not sent (Archicad's texture mapping is its own).
+* Changing *Apply modifiers* changes what is sent, so the next sync sees the object as changed.
 * Pushing creates one Archicad undo step per request (a batch is one request). Not yet checked in the
   Archicad UI.
-* Not yet checked: how the IFC sync treats morphs (it may import them as generic objects, which
-  would duplicate the ones this tool pulls). If so, the IFC sync should skip elements this tool manages.
-* The calls run on the main thread (they are quick; a huge mesh blocks Blender for a moment).
+* The IFC sync (the other panel) also imports morphs, as generic objects. Using both tools on the same
+  project duplicates them in Blender, one copy per tool. Excluding morphs from the IFC sync is still to
+  be decided.
+* The calls run on the main thread; Blender is unresponsive while a very large mesh is sent.
 * Objects (library parts) and Archicad Meshes (terrain) are not covered. `SetLibraryPartScripts` exists
   in Tapir 1.8.0, which makes generated objects possible later.
 
@@ -109,9 +133,10 @@ No IFC is involved. The core is in `acsync/morphs.py` (no Blender), the Blender 
 
 * `tests/test_morphs.py`: geometry conversion, fingerprints and the exact Tapir requests, against a
   stand-in server.
-* `tests/blender/run_morph_tests.py` (started by `tests/blender/run.py`): 20 tests inside headless
-  Blender against an in-memory stand-in for Archicad: both directions, conflicts, offsets, materials,
-  mirrored objects, modifiers, warped faces, deleted morphs, error messages, tooltips.
+* `tests/blender/run_morph_tests.py` (started by `tests/blender/run.py`): 26 tests inside headless
+  Blender against an in-memory stand-in for Archicad: both directions, conflicts, copies, offsets,
+  materials, mirrored objects, modifiers, warped faces and diagonals, deleted morphs, error messages,
+  tooltips.
 * `tests/blender/live_morph_check.py`: drives the real operators against a running Archicad. It
   creates morphs, so it refuses to run unless the open project is unsaved ("untitled") or named by
   `ACSYNC_LIVE_PROJECT`.

@@ -41,6 +41,7 @@ PROP_GUID = "acmorph_guid"
 PROP_AC_HASH = "acmorph_ac_hash"
 PROP_BL_HASH = "acmorph_bl_hash"
 PROP_REMOVED = "acmorph_removed"
+CONFLICT_MARK = "changed in Blender and in Archicad since the last sync, skipped"
 BIG_MORPH_FACES = 20_000  # above this the report mentions that Archicad needs a moment
 
 
@@ -322,13 +323,29 @@ class Counts:
 # -- pull: Archicad -> Blender ---------------------------------------------------------------
 
 
-def pull(scene, settings, msettings, api: MorphApi, dry_run: bool = False) -> engine.Report:
+def pull(
+    scene, settings, msettings, api: MorphApi, dry_run: bool = False,
+    scope: str = "ALL", only: set[str] | None = None, conflict: str | None = None,
+) -> engine.Report:
+    """Archicad -> Blender.
+
+    ``scope`` is ``ALL`` (every morph) or ``SELECTED`` (the ones selected in Archicad). ``only``
+    narrows it to those GUIDs (the collection sync passes the morphs it already has). ``conflict``
+    overrides the setting."""
     report = engine.Report(dry_run=dry_run)
     counts = Counts()
+    conflict = conflict or msettings.conflict
     offset = tuple(settings.offset)
     every_guid = api.list_guids()
     existing = set(every_guid)
-    wanted = api.selected_morphs() if msettings.pull_scope == "SELECTED" else every_guid
+    wanted = api.selected_morphs() if scope == "SELECTED" else every_guid
+    if scope == "SELECTED" and not wanted:
+        report.warnings.append(
+            "No morph is selected in Archicad. Select the morphs you want first "
+            "(only Morph elements count)."
+        )
+    if only is not None:
+        wanted = [g for g in wanted if g in only]
     geometries = api.read(wanted)
     objects = morph_objects()
     shared = shared_guids()
@@ -356,18 +373,20 @@ def pull(scene, settings, msettings, api: MorphApi, dry_run: bool = False) -> en
         blender_now = extract_geometry(
             obj, depsgraph, msettings.apply_modifiers, offset, resolve, flatness
         ).geometry.fingerprint()
-        if blender_now != obj.get(PROP_BL_HASH) and msettings.conflict == "SKIP":
+        if blender_now != obj.get(PROP_BL_HASH) and conflict == "SKIP":
             counts.conflicts += 1
             report.warnings.append(
-                f"{obj.name}: changed in Blender and in Archicad since the last sync, skipped "
+                f"{obj.name}: {CONFLICT_MARK} "
                 "(set 'If both changed' to Overwrite to take Archicad's version)"
             )
             continue
         todo.append((guid, geometry, obj))
         counts.updated += 1
 
-    if msettings.pull_scope == "ALL":
+    if scope == "ALL":
         for guid, obj in objects.items():
+            if only is not None and guid not in only:
+                continue
             if guid not in existing and not obj.get(PROP_REMOVED):
                 counts.removed += 1
                 report.add(f"{obj.name}: deleted in Archicad (the Blender object is kept)")
@@ -430,10 +449,13 @@ class Planned:
 
 
 def push(
-    scene, settings, msettings, api: MorphApi, objects, dry_run: bool = False
+    scene, settings, msettings, api: MorphApi, objects, dry_run: bool = False,
+    conflict: str | None = None,
 ) -> engine.Report:
+    """Blender -> Archicad for ``objects``. ``conflict`` overrides the setting."""
     report = engine.Report(dry_run=dry_run)
     counts = Counts()
+    conflict = conflict or msettings.conflict
     offset = tuple(settings.offset)
     known = set(api.list_guids())
     resolve = surface_resolver(settings, {n: g for g, n in api.surface_names().items()})
@@ -492,10 +514,10 @@ def push(
         elif not blender_changed:
             counts.newer_other_side += 1
             report.add(f"{obj.name}: changed in Archicad only (use Pull to bring it over)")
-        elif archicad_changed and msettings.conflict == "SKIP":
+        elif archicad_changed and conflict == "SKIP":
             counts.conflicts += 1
             report.warnings.append(
-                f"{obj.name}: changed in Blender and in Archicad since the last sync, skipped "
+                f"{obj.name}: {CONFLICT_MARK} "
                 "(set 'If both changed' to Overwrite to replace Archicad's version)"
             )
         else:
@@ -578,3 +600,39 @@ def _write_updates(api, updates: list[Planned], report, counts) -> list[tuple[Pl
         else:
             done.append((planned, guid))
     return done
+
+
+# -- collection sync -------------------------------------------------------------------------
+
+
+def collection_objects(name: str) -> list[bpy.types.Object]:
+    """The pushable mesh objects of a collection, sub-collections included."""
+    collection = bpy.data.collections.get(name)
+    return [o for o in collection.all_objects if can_push(o)] if collection else []
+
+
+def _merge_warnings(warnings: list[str]) -> list[str]:
+    """Each half of a sync reports a conflict; list it once, with advice that fits a sync."""
+    merged: list[str] = []
+    for warning in warnings:
+        if CONFLICT_MARK in warning:
+            name = warning.split(": ", 1)[0]
+            warning = (
+                f"{name}: {CONFLICT_MARK}. Choose a side with Push or Pull, with 'If both "
+                "changed' set to Overwrite."
+            )
+        if warning not in merged:
+            merged.append(warning)
+    return merged
+
+
+def merge_reports(pulled: engine.Report, pushed: engine.Report) -> engine.Report:
+    """One report for a two-way sync; a warning both halves raised is listed once."""
+    merged = engine.Report(dry_run=pulled.dry_run)
+    merged.diff_summary = f"Pull: {pulled.diff_summary}. Push: {pushed.diff_summary}"
+    merged.lines = pulled.lines + pushed.lines
+    merged.warnings = _merge_warnings(pulled.warnings + pushed.warnings)
+    merged.created_materials = list(dict.fromkeys(pulled.created_materials + pushed.created_materials))
+    merged.missing_materials = list(dict.fromkeys(pulled.missing_materials + pushed.missing_materials))
+    merged.changed_guids = pulled.changed_guids + pushed.changed_guids
+    return merged

@@ -29,26 +29,12 @@ REPORT_TEXT_NAME = "bl-ac morphs Report"
 class ACMorphSettings(PropertyGroup):
     collection: StringProperty(
         name="Collection",
-        description="Morphs pulled from Archicad are put here. Objects you push can be anywhere",
+        description=(
+            "The Blender collection the morph tool works with. Push collection and Sync "
+            "collection use every mesh object in it (sub-collections included), and morphs "
+            "pulled from Archicad are put in it"
+        ),
         default="bl-ac morphs",
-    )
-    pull_scope: EnumProperty(
-        name="Pull",
-        description="Which Archicad morphs to bring into Blender",
-        items=[
-            ("ALL", "All morphs", "Every morph in the Archicad project"),
-            ("SELECTED", "Selected in Archicad", "Only the morphs currently selected in Archicad"),
-        ],
-        default="ALL",
-    )
-    push_scope: EnumProperty(
-        name="Push",
-        description="Which Blender objects to send to Archicad",
-        items=[
-            ("SELECTED", "Selected objects", "The selected mesh objects"),
-            ("COLLECTION", "Morph collection", "Every mesh object in the morph collection"),
-        ],
-        default="SELECTED",
     )
     apply_modifiers: BoolProperty(
         name="Apply modifiers",
@@ -58,8 +44,8 @@ class ACMorphSettings(PropertyGroup):
     )
     conflict: EnumProperty(
         name="If both changed",
-        description="What to do with a morph that changed in Blender and in Archicad since the "
-        "last sync",
+        description="What Push and Pull do with a morph that changed in Blender and in Archicad "
+        "since the last sync. Sync collection always skips and reports them",
         items=[
             ("SKIP", "Skip and report", "Leave both versions as they are and list the morph"),
             ("OVERWRITE", "Overwrite", "The side you are syncing to is replaced"),
@@ -74,6 +60,11 @@ class ACMorphSettings(PropertyGroup):
             "limit is about 0.35 %, so keep this below that"
         ),
         default=0.1, min=0.0, max=0.3, precision=3, subtype="PERCENTAGE",
+    )
+    dry_run: BoolProperty(
+        name="Dry run",
+        description="Make the buttons only show what they would do. Nothing is changed",
+        default=False,
     )
     last_summary: StringProperty(default="", options={"HIDDEN"})
 
@@ -101,7 +92,21 @@ def _store_report(msettings, report: engine.Report, title: str) -> None:
     block.clear()
     block.write(f"{title}\n{time.strftime('%Y-%m-%d %H:%M:%S')}\n\n{report.text()}\n")
     prefix = "Dry run: " if report.dry_run else ""
-    msettings.last_summary = f"{prefix}{title}: {report.diff_summary}"
+    text = f"{prefix}{title}: {report.diff_summary}"
+    if report.warnings:  # the panel only shows this line, so the first warning goes with it
+        more = len(report.warnings) - 1
+        text += f". Warning: {report.warnings[0]}" + (f" (+{more} more in the report)" if more else "")
+    msettings.last_summary = text
+
+
+def _collection_objects(m: ACMorphSettings) -> list[bpy.types.Object]:
+    objects = morph_engine.collection_objects(m.collection)
+    if not objects:
+        raise AcSyncError(
+            f"Nothing to push: no mesh objects in the collection '{m.collection}'. "
+            "Choose the collection in the panel and put your meshes in it."
+        )
+    return objects
 
 
 class _MorphOperator(Operator):
@@ -109,6 +114,7 @@ class _MorphOperator(Operator):
         name="Dry run", description="Only show what would change", default=False,
         options={"SKIP_SAVE"},
     )
+    scope_tips = {}  # scope -> tooltip; subclasses fill it in
 
     @classmethod
     def poll(cls, context):
@@ -116,9 +122,10 @@ class _MorphOperator(Operator):
 
     @classmethod
     def description(cls, context, properties):
+        text = cls.scope_tips.get(getattr(properties, "scope", ""), cls.bl_description)
         if properties.dry_run:
-            return f"Preview what {cls.bl_label.lower()} would do. Nothing is changed"
-        return cls.bl_description
+            return f"Preview only: {text[0].lower()}{text[1:]} Nothing is changed"
+        return text
 
     def execute(self, context):
         try:
@@ -139,39 +146,87 @@ class _MorphOperator(Operator):
 class ACMORPH_OT_pull(_MorphOperator):
     bl_idname = "acmorph.pull"
     bl_label = "Pull morphs"
-    bl_description = "Bring Archicad morphs into Blender as mesh objects, updating those already there"
+    bl_description = "Bring Archicad morphs into Blender as mesh objects, updating those already there."
     bl_options = {"REGISTER", "UNDO"}
+    scope: EnumProperty(
+        name="Pull",
+        description="Which Archicad morphs to bring into Blender",
+        items=[
+            ("SELECTED", "Selected in Archicad", "Only the morphs currently selected in Archicad"),
+            ("ALL", "All morphs", "Every morph in the Archicad project"),
+        ],
+        default="ALL",
+        options={"SKIP_SAVE"},
+    )
+    scope_tips = {
+        "SELECTED": "Bring only the morphs that are selected in Archicad into Blender, "
+        "updating those already there.",
+        "ALL": "Bring every Archicad morph into Blender as a mesh object in the morph "
+        "collection, updating those already there.",
+    }
 
     def run(self, context, api):
         scene = context.scene
-        return morph_engine.pull(scene, scene.acsync, scene.acmorph, api, self.dry_run)
+        return morph_engine.pull(
+            scene, scene.acsync, scene.acmorph, api, self.dry_run, scope=self.scope
+        )
 
 
 class ACMORPH_OT_push(_MorphOperator):
     bl_idname = "acmorph.push"
     bl_label = "Push to Archicad"
+    bl_description = "Send mesh objects to Archicad as morphs."
+    bl_options = {"REGISTER", "UNDO"}
+    scope: EnumProperty(
+        name="Push",
+        description="Which Blender objects to send to Archicad",
+        items=[
+            ("SELECTED", "Selected objects", "The selected mesh objects"),
+            ("COLLECTION", "Collection", "Every mesh object in the morph collection"),
+        ],
+        default="SELECTED",
+        options={"SKIP_SAVE"},
+    )
+    scope_tips = {
+        "SELECTED": "Send the selected mesh objects to Archicad as morphs. Objects sent before "
+        "update the same morph.",
+        "COLLECTION": "Send every mesh object in the morph collection (sub-collections "
+        "included) to Archicad as morphs. Objects sent before update the same morph.",
+    }
+
+    def run(self, context, api):
+        scene = context.scene
+        m = scene.acmorph
+        if self.scope == "COLLECTION":
+            objects = _collection_objects(m)
+        else:
+            objects = [o for o in context.selected_objects if morph_engine.can_push(o)]
+            if not objects:
+                raise AcSyncError("Nothing to push: select mesh objects")
+        return morph_engine.push(scene, scene.acsync, m, api, objects, self.dry_run)
+
+
+class ACMORPH_OT_sync(_MorphOperator):
+    bl_idname = "acmorph.sync"
+    bl_label = "Sync collection"
     bl_description = (
-        "Send mesh objects to Archicad as morphs. Objects sent before update the same morph. "
-        "Archicad changes are one undo step each"
+        "Two-way sync of the morph collection in one click: bring the Archicad changes into the "
+        "morphs that are already in it, then send everything new or changed in Blender. Morphs "
+        "that changed on both sides are skipped and listed. New Archicad morphs are not imported "
+        "(use Pull for that)."
     )
     bl_options = {"REGISTER", "UNDO"}
 
     def run(self, context, api):
         scene = context.scene
         m = scene.acmorph
-        if m.push_scope == "COLLECTION":
-            coll = bpy.data.collections.get(m.collection)
-            candidates = list(coll.all_objects) if coll else []
-        else:
-            candidates = list(context.selected_objects)
-        objects = [o for o in candidates if morph_engine.can_push(o)]
-        if not objects:
-            raise AcSyncError(
-                "Nothing to push: select mesh objects"
-                if m.push_scope == "SELECTED"
-                else f"Nothing to push: no mesh objects in the collection '{m.collection}'"
-            )
-        return morph_engine.push(scene, scene.acsync, m, api, objects, self.dry_run)
+        objects = _collection_objects(m)
+        linked = {str(o[morph_engine.PROP_GUID]).upper() for o in objects if morph_engine.PROP_GUID in o}
+        pulled = morph_engine.pull(
+            scene, scene.acsync, m, api, self.dry_run, only=linked, conflict="SKIP"
+        )
+        pushed = morph_engine.push(scene, scene.acsync, m, api, objects, self.dry_run, "SKIP")
+        return morph_engine.merge_reports(pulled, pushed)
 
 
 class ACMORPH_OT_detach(Operator):
@@ -210,7 +265,12 @@ class ACMORPH_OT_copy_report(Operator):
 
 
 CLASSES = (
-    ACMorphSettings, ACMORPH_OT_pull, ACMORPH_OT_push, ACMORPH_OT_detach, ACMORPH_OT_copy_report
+    ACMorphSettings,
+    ACMORPH_OT_pull,
+    ACMORPH_OT_push,
+    ACMORPH_OT_sync,
+    ACMORPH_OT_detach,
+    ACMORPH_OT_copy_report,
 )
 
 

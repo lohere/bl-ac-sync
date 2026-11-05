@@ -13,6 +13,15 @@ class _Base:
     bl_category = "bl-ac"
 
 
+def _button(layout, m, idname: str, text: str, icon: str, **props):
+    """An operator button that follows the panel's Dry run switch."""
+    op = layout.operator(idname, text=text, icon=icon)
+    op.dry_run = m.dry_run
+    for key, value in props.items():
+        setattr(op, key, value)
+    return op
+
+
 class ACMORPH_PT_main(_Base, Panel):
     bl_label = "bl-ac morphs (experimental)"
     bl_idname = "ACMORPH_PT_main"
@@ -36,15 +45,27 @@ class ACMORPH_PT_main(_Base, Panel):
             ui._lines(box, state.message)
         box.label(text="Needs Tapir 1.8.0 or newer")
 
+        layout.prop_search(m, "collection", bpy.data, "collections", icon="OUTLINER_COLLECTION")
+
         col = layout.column(align=True)
         col.enabled = not busy
         row = col.row(align=True)
         row.scale_y = 1.4
-        row.operator("acmorph.pull", text="Pull", icon="IMPORT").dry_run = False
-        row.operator("acmorph.push", text="Push", icon="EXPORT").dry_run = False
+        _button(row, m, "acmorph.sync", "Sync collection", "FILE_REFRESH")
+
+        col.separator()
+        col.label(text="Blender to Archicad")
         row = col.row(align=True)
-        row.operator("acmorph.pull", text="Dry run", icon="VIEWZOOM").dry_run = True
-        row.operator("acmorph.push", text="Dry run", icon="VIEWZOOM").dry_run = True
+        _button(row, m, "acmorph.push", "Selected", "EXPORT", scope="SELECTED")
+        _button(row, m, "acmorph.push", "Collection", "OUTLINER_COLLECTION", scope="COLLECTION")
+
+        col.separator()
+        col.label(text="Archicad to Blender")
+        row = col.row(align=True)
+        _button(row, m, "acmorph.pull", "Selected", "RESTRICT_SELECT_OFF", scope="SELECTED")
+        _button(row, m, "acmorph.pull", "All", "IMPORT", scope="ALL")
+
+        layout.prop(m, "dry_run")
         layout.prop(m, "conflict")
 
         if m.last_summary:
@@ -64,9 +85,6 @@ class ACMORPH_PT_options(_Base, Panel):
     def draw(self, context):
         m = context.scene.acmorph
         col = self.layout.column()
-        col.prop(m, "pull_scope")
-        col.prop(m, "push_scope")
-        col.prop(m, "collection")
         col.prop(m, "apply_modifiers")
         col.prop(m, "flatness")
         col.operator("acmorph.detach", icon="UNLINKED")

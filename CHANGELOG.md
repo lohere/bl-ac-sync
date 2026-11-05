@@ -10,6 +10,8 @@ reaches 1.0; until then minor versions may change behaviour.
   a dry run. Needs Tapir 1.8.0 or newer. See [docs/MORPHS.md](docs/MORPHS.md).
   Warped faces are split into triangles, because Archicad faces must be flat; a copy of a pushed
   object is skipped until it is detached.
+- **New:** *Sync collection* (two-way sync of a chosen Blender collection in one click) and visible
+  *Selected* / *All* buttons for Push and Pull (Pull Selected takes the morphs selected in Archicad).
 
 ## 0.1.1
 

@@ -96,10 +96,10 @@ def fresh():
     return bpy.context.scene
 
 
-def expect_error(text, operator, *args):
+def expect_error(text, operator, *args, **kwargs):
     """Operators that report an error raise RuntimeError when called from a script."""
     try:
-        operator(*args)
+        operator(*args, **kwargs)
     except RuntimeError as exc:
         assert text in str(exc), str(exc)
         return
@@ -137,9 +137,9 @@ def push(objs, dry=False):
     return me.push(scene, scene.acsync, scene.acmorph, FAKE, objs, dry)
 
 
-def pull(dry=False):
+def pull(dry=False, **kwargs):
     scene = bpy.context.scene
-    return me.pull(scene, scene.acsync, scene.acmorph, FAKE, dry)
+    return me.pull(scene, scene.acsync, scene.acmorph, FAKE, dry, **kwargs)
 
 
 def world_vertices(obj):
@@ -280,9 +280,20 @@ def test_pull_scope_selected_in_archicad():
     FAKE.add(box_geometry())
     two = FAKE.add(box_geometry(origin=(5.0, 0.0, 0.0)))
     FAKE.selection = [two]
-    bpy.context.scene.acmorph.pull_scope = "SELECTED"
-    pull()
+    pull(scope="SELECTED")
     assert list(me.morph_objects()) == [two]
+
+
+def test_pull_selected_says_so_when_nothing_is_selected():
+    scene = fresh()
+    FAKE.add(box_geometry())
+    report = pull(scope="SELECTED")
+    assert "No morph is selected in Archicad" in "\n".join(report.warnings)
+    assert "0 new" in report.diff_summary and not bpy.data.objects
+    assert bpy.ops.acmorph.pull("EXEC_DEFAULT", scope="SELECTED") == {"FINISHED"}
+    assert "Pull morphs: 0 new" in scene.acmorph.last_summary
+    assert "Warning: No morph is selected" in scene.acmorph.last_summary
+    assert "No morph is selected" in bpy.data.texts["bl-ac morphs Report"].as_string()
 
 
 def test_dry_runs_change_nothing():
@@ -408,6 +419,129 @@ def test_a_pull_updates_many_objects_with_a_single_scene_update():
     assert len(updates) == 2, updates  # once to read the scene, once to fingerprint the results
 
 
+def put_in(collection, *objs):
+    for obj in objs:
+        for old in list(obj.users_collection):
+            old.objects.unlink(obj)
+        collection.objects.link(obj)
+
+
+def make_collection(name, parent=None):
+    collection = bpy.data.collections.new(name)
+    (parent or bpy.context.scene.collection).children.link(collection)
+    return collection
+
+
+def test_pushing_a_collection_sends_every_mesh_in_it_sub_collections_included():
+    scene = fresh()
+    facade = make_collection("Facade")
+    inner = make_collection("Inner", facade)
+    a, b, c, outside = cube("A"), cube("B"), cube("C"), cube("Outside")
+    put_in(facade, a, b)
+    put_in(inner, c)
+    empty = bpy.data.objects.new("Empty", None)
+    facade.objects.link(empty)
+    scene.acmorph.collection = "Facade"
+    select_only(outside)  # the selection does not matter for a collection push
+    assert bpy.ops.acmorph.push("EXEC_DEFAULT", scope="COLLECTION") == {"FINISHED"}
+    assert len(FAKE.morphs) == 3 and "3 created" in scene.acmorph.last_summary
+    assert me.PROP_GUID not in outside and me.PROP_GUID not in empty
+    put_in(facade, cube("Late"))  # added later: only this one is new
+    bpy.ops.acmorph.push("EXEC_DEFAULT", scope="COLLECTION")
+    assert len(FAKE.morphs) == 4 and "1 created, 0 updated, 3 unchanged" in scene.acmorph.last_summary
+
+
+def test_sync_collection_goes_both_ways_and_ignores_morphs_outside_it():
+    scene = fresh()
+    team = make_collection("Team")
+    only_blender, only_archicad, both, new = cube("OB"), cube("OA"), cube("BOTH"), cube("NEW")
+    put_in(team, only_blender, only_archicad, both)
+    scene.acmorph.collection = "Team"
+    bpy.ops.acmorph.push("EXEC_DEFAULT", scope="COLLECTION")  # all three now exist in Archicad
+    guids = {o.name: o[me.PROP_GUID] for o in (only_blender, only_archicad, both)}
+    stranger = FAKE.add(box_geometry(origin=(50.0, 0.0, 0.0)))  # an Archicad morph nobody pulled
+
+    only_blender.data.vertices[0].co.x -= 1.0  # changed in Blender only
+    only_blender.data.update()
+    moved = [(x, y, z + 2) for x, y, z in FAKE.morphs[guids["OA"]].vertices]  # in Archicad only
+    FAKE.morphs[guids["OA"]] = MorphGeometry(moved, FAKE.morphs[guids["OA"]].faces)
+    both.data.vertices[0].co.x -= 1.0  # changed on both sides
+    both.data.update()
+    FAKE.morphs[guids["BOTH"]] = MorphGeometry(
+        [(x, y, z + 3) for x, y, z in FAKE.morphs[guids["BOTH"]].vertices],
+        FAKE.morphs[guids["BOTH"]].faces,
+    )
+    put_in(team, new)
+    bpy.context.view_layer.update()
+    both_ac_before = ac_vertices(guids["BOTH"])
+    both_bl_before = world_vertices(both)
+
+    assert bpy.ops.acmorph.sync("EXEC_DEFAULT", dry_run=True) == {"FINISHED"}
+    assert ac_vertices(guids["OA"]) == sorted(tuple(round(c, 6) for c in v) for v in moved)
+    assert "NEW" not in [FAKE.ids.get(g) for g in FAKE.morphs]  # a dry run sends nothing
+
+    scene.acmorph.conflict = "OVERWRITE"  # Sync collection must not obey this: it skips
+    assert bpy.ops.acmorph.sync("EXEC_DEFAULT") == {"FINISHED"}
+    summary = scene.acmorph.last_summary
+    assert "Pull: 0 new, 1 changed" in summary and "Push: 1 created, 1 updated" in summary, summary
+    assert world_vertices(only_archicad) == ac_vertices(guids["OA"])  # came over from Archicad
+    assert ac_vertices(guids["OB"]) == world_vertices(only_blender)  # went over to Archicad
+    assert new.get(me.PROP_GUID) and len(FAKE.morphs) == 5  # NEW created; the stranger untouched
+    assert ac_vertices(guids["BOTH"]) == both_ac_before and world_vertices(both) == both_bl_before
+    assert stranger in FAKE.morphs and me.morph_objects().get(stranger) is None
+    assert summary.count("conflict(s) skipped") == 2  # once per half
+    assert len(bpy.data.texts["bl-ac morphs Report"].as_string().split("changed in Blender and")) == 2
+    scene.acmorph.conflict = "SKIP"
+    assert "0 changed" in _sync_summary(scene)  # and now everything is quiet
+
+
+def _sync_summary(scene):
+    bpy.ops.acmorph.sync("EXEC_DEFAULT")
+    return scene.acmorph.last_summary
+
+
+def test_pull_selected_and_pull_all_through_the_buttons():
+    scene = fresh()
+    FAKE.add(box_geometry())
+    two = FAKE.add(box_geometry(origin=(5.0, 0.0, 0.0)))
+    FAKE.selection = [two]
+    assert bpy.ops.acmorph.pull("EXEC_DEFAULT", scope="SELECTED") == {"FINISHED"}
+    assert list(me.morph_objects()) == [two] and "1 new" in scene.acmorph.last_summary
+    assert bpy.ops.acmorph.pull("EXEC_DEFAULT", scope="ALL") == {"FINISHED"}
+    assert len(me.morph_objects()) == 2 and "1 new, 0 changed, 1 unchanged" in scene.acmorph.last_summary
+
+
+def test_tooltips_follow_the_scope_and_the_dry_run_switch():
+    fresh()
+    tip = bpy.ops.acmorph.push.get_rna_type().description
+    assert tip  # the generic text exists too
+    cls = morph_ops.ACMORPH_OT_push
+    props = type("P", (), {"scope": "COLLECTION", "dry_run": False})
+    assert "every mesh object in the morph collection" in cls.description(None, props)
+    dry = type("P", (), {"scope": "SELECTED", "dry_run": True})
+    assert cls.description(None, dry).startswith("Preview only:")
+
+
+def test_the_panel_draws_and_only_uses_things_that_exist():
+    from unittest.mock import MagicMock
+
+    from ac_sync import morph_ui
+
+    scene = fresh()
+    scene.acmorph.last_summary = "something"
+    bpy.data.texts.new("bl-ac morphs Report")
+    for panel in (morph_ui.ACMORPH_PT_main, morph_ui.ACMORPH_PT_options):
+        layout = MagicMock()
+        panel.draw(type("Self", (), {"layout": layout}), bpy.context)
+        for call in layout.mock_calls:
+            if call[0].endswith("operator") or ".operator" in call[0]:
+                idname = call.args[0]
+                module, name = idname.split(".")
+                assert hasattr(getattr(bpy.ops, module), name), idname
+            if call[0].endswith("prop") or call[0].endswith("prop_search"):
+                assert hasattr(scene.acmorph, call.args[1]), call.args[1]
+
+
 def test_flatness_is_judged_relative_to_the_face_size():
     # Archicad refuses a quad warped by more than ~0.35 % of its size: a 20 cm face warped by
     # under 1 mm is refused, a 5 m face with the same warp is fine.
@@ -498,8 +632,10 @@ def test_operators_push_and_pull_through_the_panel_buttons():
     assert scene.acmorph.last_summary.startswith("Dry run")
     select_only()
     expect_error("select mesh objects", bpy.ops.acmorph.push, "EXEC_DEFAULT")  # nothing selected
-    scene.acmorph.push_scope = "COLLECTION"
-    expect_error("no mesh objects in the collection", bpy.ops.acmorph.push, "EXEC_DEFAULT")
+    expect_error(
+        "no mesh objects in the collection", bpy.ops.acmorph.push, "EXEC_DEFAULT", scope="COLLECTION"
+    )
+    expect_error("no mesh objects in the collection", bpy.ops.acmorph.sync, "EXEC_DEFAULT")
 
 
 def test_old_tapir_gets_a_clear_message():

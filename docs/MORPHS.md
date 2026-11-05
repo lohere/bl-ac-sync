@@ -12,9 +12,11 @@ Needs **Tapir 1.8.0 or newer** (the sync from Archicad does not). Status: proof 
 
 | Button | Does |
 | --- | --- |
-| **Push** | Sends the selected mesh objects (or every mesh in the morph collection) to Archicad. A new object becomes a new morph; an object that was sent before updates the same morph (same GUID, so its layer, ID and properties stay). |
-| **Pull** | Brings Archicad morphs into Blender as mesh objects in the `bl-ac morphs` collection, or updates the ones already there. Can be limited to the morphs selected in Archicad. |
-| **Dry run** | Both directions can first show what would change. |
+| **Collection** (picker) | The Blender collection the tool works with (default `bl-ac morphs`, sub-collections included). Pulled morphs are put there. |
+| **Sync collection** | One click, both ways, for that collection: Archicad changes come into the morphs already in it, then everything new or changed in Blender is sent. A morph changed on both sides is skipped and listed. New Archicad morphs are *not* imported (use Pull All). Nothing is ever deleted. |
+| **Push: Selected / Collection** | Sends the selected mesh objects, or every mesh in the collection, to Archicad. A new object becomes a new morph; an object that was sent before updates the same morph (same GUID, so its layer, ID and properties stay). |
+| **Pull: Selected / All** | Brings Archicad morphs into Blender as mesh objects in the collection, or updates the ones already there. *Selected* takes only the morphs selected in Archicad. |
+| **Dry run** (checkbox) | Makes every button only show what it would do. |
 
 Per face it carries the **material** both ways (see below), keeps **n-gons**, concave faces and
 **open meshes** (sent as Archicad *Surface* bodies), and applies **modifiers** by default so an array
@@ -123,8 +125,8 @@ No IFC is involved. The core is in `acsync/morphs.py` (no Blender), the Blender 
 * Pushing creates one Archicad undo step per request (a batch is one request). Not yet checked in the
   Archicad UI.
 * The IFC sync (the other panel) also imports morphs, as generic objects. Using both tools on the same
-  project duplicates them in Blender, one copy per tool. Excluding morphs from the IFC sync is still to
-  be decided.
+  project duplicates them in Blender, one copy per tool. Planned, not a priority: a choice in the IFC
+  sync for people who do not use the morph tool, or a smarter match between the two.
 * The calls run on the main thread; Blender is unresponsive while a very large mesh is sent.
 * Objects (library parts) and Archicad Meshes (terrain) are not covered. `SetLibraryPartScripts` exists
   in Tapir 1.8.0, which makes generated objects possible later.
@@ -133,8 +135,9 @@ No IFC is involved. The core is in `acsync/morphs.py` (no Blender), the Blender 
 
 * `tests/test_morphs.py`: geometry conversion, fingerprints and the exact Tapir requests, against a
   stand-in server.
-* `tests/blender/run_morph_tests.py` (started by `tests/blender/run.py`): 26 tests inside headless
-  Blender against an in-memory stand-in for Archicad: both directions, conflicts, copies, offsets,
+* `tests/blender/run_morph_tests.py` (started by `tests/blender/run.py`): 32 tests inside headless
+  Blender against an in-memory stand-in for Archicad: both directions, collection sync, scopes, the
+  panel itself, conflicts, copies, offsets,
   materials, mirrored objects, modifiers, warped faces and diagonals, deleted morphs, error messages,
   tooltips.
 * `tests/blender/live_morph_check.py`: drives the real operators against a running Archicad. It

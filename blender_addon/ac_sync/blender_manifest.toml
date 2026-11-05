@@ -7,7 +7,7 @@ tagline = "Update Archicad geometry in Blender without losing your work"
 maintainer = "Drotár Bence"
 type = "add-on"
 
-website = "https://github.com/lohere/AC-Sync"
+website = "https://github.com/lohere/bl-ac-sync"
 tags = ["Import-Export"]
 copyright = ["2026 Drotár Bence"]
 

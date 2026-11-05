@@ -2,7 +2,7 @@
 
 **Update your Archicad model in Blender with one click.**
 
-A free, open-source Blender add-on that brings your Archicad model into Blender and keeps it up to date. Built for architects and students who render, present or animate their Archicad projects in Blender. Works with Archicad 29 through the free Tapir add-on.
+A free, open-source Blender add-on that brings your Archicad model into Blender and keeps it up to date. Built for architects and students who render, present or animate their Archicad projects in Blender. Works with Archicad 29 through the free Tapir add-on. New in 0.2.0: an experimental panel that sends shapes modelled in Blender back to Archicad as Morphs ([see below](#morphs-send-shapes-back-to-archicad-experimental)).
 
 ---
 
@@ -27,7 +27,7 @@ You can, but every design change means exporting and importing again, and the ne
 | You need | Notes |
 | --- | --- |
 | **Archicad 29** | Other versions are untested. The project must be open while you sync. |
-| **Tapir** (free Archicad add-on) | Lets other programs talk to Archicad. Version **1.7.1 or newer**. See Install. |
+| **Tapir** (free Archicad add-on) | Lets other programs talk to Archicad. Version **1.7.1 or newer**, **1.8.0 or newer** for the morph panel. See Install. |
 | **Blender 5.0 or newer** | Developed and tested on Blender 5.2 LTS. Older versions are not tested. |
 | **Windows** | macOS has not been tested yet. |
 
@@ -98,6 +98,32 @@ Image textures: Archicad does not pass texture coordinates (UVs) on, so the tool
 
 ---
 
+## Morphs: send shapes back to Archicad (experimental)
+
+New in 0.2.0. A second panel, **bl-ac morphs**, works the other way round. Model a shape in Blender, send it to Archicad as a **Morph** (the element that is painful to model in Archicad), keep working in either program, and bring Archicad's morphs back into Blender.
+
+1. Click the refresh icon at the top of the panel. It needs **Tapir 1.8.0 or newer**.
+2. Put your meshes in a Blender collection and choose it in **Collection**.
+3. Press **Sync collection**. New and changed meshes are sent to Archicad, and changes you made to those morphs in Archicad come back. Do it again after every change.
+
+Or use the buttons for one direction: **Push** sends the selected objects (or the whole collection), **Pull** brings in the morphs selected in Archicad (or all of them). The **Dry run** checkbox makes every button only show what it would do.
+
+- An object keeps its morph: sending it again changes the same morph, so its layer, ID and properties in Archicad stay.
+- If the same morph changed in both programs since the last sync, it is skipped and listed. Nothing is overwritten (unless you choose *Overwrite*), and nothing is ever deleted.
+- Materials are matched by name: name a Blender material like an Archicad surface (for example `Brick - Red`) and its faces get that surface. Pulled morphs bring their surfaces as Blender materials.
+- A copy of a sent object (Shift+D) must be detached first (**Options > Detach from Archicad**), otherwise it is skipped.
+
+**Good to know:**
+
+- Archicad faces must be flat, so **warped faces become triangles** when you push. Flat quads and n-gons stay as they are, but a curved or sculpted mesh arrives as a triangle mesh, and there is no rounding in Archicad's morphs.
+- Very dense meshes work but are slow (about 8 seconds for 50,000 faces).
+- It is experimental. Try it on a copy of your project first.
+- The sync from Archicad (above) also brings morphs in, as generic objects, so using both panels on the same project duplicates them in Blender.
+
+Details, limits and measurements: [`docs/MORPHS.md`](docs/MORPHS.md).
+
+---
+
 ## Good to know
 
 - **Archicad leaves some things out of an export.** The most common cases are explained in [`docs/ARCHICAD_SETUP.md`](docs/ARCHICAD_SETUP.md): hidden layers, materials without "Participates in Collision Detection", and elements that have no geometry. The report tells you what is missing after every sync. **Select in Archicad** (a button next to the result) selects the missing elements in Archicad so you can look at them.
@@ -125,6 +151,8 @@ I'm an architecture student, this tool was made primarily for myself, but sharin
 | Elements missing | Read the report, then see [`docs/ARCHICAD_SETUP.md`](docs/ARCHICAD_SETUP.md). |
 | Textures look stretched | The material needs a **Texture Coordinate > UV** node, and **Generate UVs** must be on. |
 | Model sits in the wrong place | Check **Archicad coordinates** and **Offset** in **Output**. |
+| "Morph sync needs Tapir 1.8.0 or newer" | Install the newest Tapir and restart Archicad. |
+| "Archicad refused the morph" | Most likely an edge that is shared by more than two faces. The report names the object; **Select > Select All by Trait > Non Manifold** in Blender shows the edges. |
 
 ---
 

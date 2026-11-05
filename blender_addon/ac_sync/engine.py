@@ -200,7 +200,7 @@ def material_for(surface: SurfaceStyle, mapping: MaterialMap, report: Report) ->
     return mat
 
 
-def _load_slots(obj) -> list[str]:
+def load_slots(obj) -> list[str]:
     try:
         slots = json.loads(obj.get(PROP_SLOTS, "[]"))
     except (TypeError, ValueError):
@@ -211,7 +211,7 @@ def _load_slots(obj) -> list[str]:
     return slots
 
 
-def _slot_index_for(obj, surface: SurfaceStyle, slots: list[str], mapping, report) -> int:
+def slot_index_for(obj, surface: SurfaceStyle, slots: list[str], mapping, report) -> int:
     if surface.name in slots:
         return slots.index(surface.name)
     obj.data.materials.append(material_for(surface, mapping, report))
@@ -236,9 +236,9 @@ def _write_geometry(
         faces.append(idx[pos:pos + size])
         pos += size
 
-    slots = _load_slots(obj)
+    slots = load_slots(obj)
     slot_of_surface = [
-        _slot_index_for(obj, s, slots, mapping, report) for s in element.surfaces
+        slot_index_for(obj, s, slots, mapping, report) for s in element.surfaces
     ]
 
     mesh.clear_geometry()  # keeps the material slots
@@ -403,7 +403,7 @@ def apply_material_map(settings) -> tuple[int, list[str]]:
     changed = 0
     missing = []
     for obj in managed_objects(settings.root_collection).values():
-        slots = _load_slots(obj)
+        slots = load_slots(obj)
         for i, surface_name in enumerate(slots):
             if not surface_name or not mapping.is_mapped(surface_name):
                 continue

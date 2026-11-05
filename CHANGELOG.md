@@ -3,6 +3,12 @@
 All notable changes. The project follows [Semantic Versioning](https://semver.org/) once it
 reaches 1.0; until then minor versions may change behaviour.
 
+## Unreleased (0.2.0 work, branch `feature/two-way-morphs`)
+
+- **New, experimental:** *bl-ac morphs*, a second panel that sends Blender meshes to Archicad as
+  Morphs and brings Archicad morphs into Blender, both ways, with materials, conflict detection and
+  a dry run. Needs Tapir 1.8.0 or newer. See [docs/MORPHS.md](docs/MORPHS.md).
+
 ## 0.1.1
 
 - **New:** a *Help* button next to the version in the panel (Advanced) opens the project page with

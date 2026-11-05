@@ -66,13 +66,19 @@ class ACMorphSettings(PropertyGroup):
         ],
         default="SKIP",
     )
-    planar_tolerance: FloatProperty(
+    flatness: FloatProperty(
         name="Flatness tolerance",
-        description="Faces with more than three corners that are warped by more than this are "
-        "split into triangles, because an Archicad face must be flat",
-        default=0.001, min=0.0, max=1.0, precision=4, subtype="DISTANCE", unit="LENGTH",
+        description=(
+            "Faces with more than three corners that are warped by more than this share of their "
+            "size are split into triangles. Archicad refuses faces that are not flat; its own "
+            "limit is about 0.35 %, so keep this below that"
+        ),
+        default=0.1, min=0.0, max=0.3, precision=3, subtype="PERCENTAGE",
     )
     last_summary: StringProperty(default="", options={"HIDDEN"})
+
+    def flatness_ratio(self) -> float:
+        return self.flatness / 100.0
 
 
 def _connect(context) -> tuple[MorphApi, str]:

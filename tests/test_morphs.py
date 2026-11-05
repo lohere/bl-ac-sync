@@ -5,6 +5,7 @@ from acsync import (
     MorphGeometry,
     TapirClient,
     TapirCommandError,
+    face_size,
     morph_body,
     parse_geometry,
     planar_deviation,
@@ -69,11 +70,26 @@ def test_fingerprint_changes_with_geometry_and_surface_only():
     assert noise.fingerprint() == a.fingerprint()
 
 
+def test_edges_on_more_than_two_faces_are_counted():
+    shared = MorphGeometry(
+        [(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 1), (-1, -1, 1)],
+        [MorphFace([0, 1, 2]), MorphFace([1, 0, 3]), MorphFace([0, 1, 4])],
+    )
+    assert shared.overshared_edges() == 1 and not shared.is_closed()
+    assert geometry().overshared_edges() == 0
+
+
 def test_polygon_normal_follows_the_winding():
     square = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
     assert polygon_normal(square) == (0.0, 0.0, 1.0)
     assert polygon_normal(square[::-1]) == (0.0, 0.0, -1.0)
     assert polygon_normal([(0, 0, 0), (1, 0, 0), (2, 0, 0)]) == (0.0, 0.0, 0.0)
+
+
+def test_face_size_is_the_longest_corner_distance():
+    assert face_size([(0, 0, 0), (3, 0, 0), (3, 4, 0), (0, 4, 0)]) == 5.0
+    ring = [(i, 0, 0) for i in range(20)]  # many corners: the box diagonal
+    assert face_size(ring) == 19.0
 
 
 def test_planar_deviation():

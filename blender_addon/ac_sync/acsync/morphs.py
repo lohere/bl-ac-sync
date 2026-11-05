@@ -64,15 +64,24 @@ class MorphGeometry:
     def surface_guids(self) -> set[str]:
         return {f.surface.upper() for f in self.faces if f.surface}
 
-    def is_closed(self) -> bool:
-        """True for a watertight volume: every edge borders exactly two faces."""
+    def _edge_uses(self) -> dict[tuple[int, int], int]:
         uses: dict[tuple[int, int], int] = {}
         for f in self.faces:
             for ring in [f.loop, *f.holes]:
                 for a, b in zip(ring, ring[1:] + ring[:1]):
                     key = (a, b) if a < b else (b, a)
                     uses[key] = uses.get(key, 0) + 1
+        return uses
+
+    def is_closed(self) -> bool:
+        """True for a watertight volume: every edge borders exactly two faces."""
+        uses = self._edge_uses()
         return bool(uses) and all(n == 2 for n in uses.values())
+
+    def overshared_edges(self) -> int:
+        """Edges that border more than two faces. Archicad cannot build a body with those
+        (it answers only 'Failed to create morph')."""
+        return sum(1 for n in self._edge_uses().values() if n > 2)
 
 
 @dataclass(frozen=True)
@@ -143,11 +152,24 @@ def polygon_normal(points: Sequence[Vec]) -> Vec:
     return (nx / length, ny / length, nz / length)
 
 
+def face_size(points: Sequence[Vec]) -> float:
+    """The face's largest extent: its longest diagonal (corner to corner distance)."""
+    if len(points) > 12:  # many corners: the box diagonal is close enough and linear
+        lows = [min(p[i] for p in points) for i in range(3)]
+        highs = [max(p[i] for p in points) for i in range(3)]
+        return sum((h - low) ** 2 for low, h in zip(lows, highs)) ** 0.5
+    best = 0.0
+    for i, a in enumerate(points):
+        for b in points[i + 1:]:
+            best = max(best, sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5)
+    return best
+
+
 def planar_deviation(points: Sequence[Vec]) -> float:
     """Largest distance of the points from the face's best plane, in metres.
 
-    0 for a triangle or any flat face. Archicad builds faces as given, so a clearly warped quad
-    has to be triangulated by the caller first.
+    0 for a triangle or any flat face. Archicad refuses a face that is warped by more than about
+    0.35 % of its size (measured on Archicad 29), so the caller splits such faces into triangles.
     """
     n = len(points)
     if n <= 3:

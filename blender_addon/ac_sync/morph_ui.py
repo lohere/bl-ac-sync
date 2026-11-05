@@ -68,7 +68,7 @@ class ACMORPH_PT_options(_Base, Panel):
         col.prop(m, "push_scope")
         col.prop(m, "collection")
         col.prop(m, "apply_modifiers")
-        col.prop(m, "planar_tolerance")
+        col.prop(m, "flatness")
         col.label(text="Offset, port and materials: see bl-ac sync")
 
 

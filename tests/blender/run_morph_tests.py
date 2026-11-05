@@ -354,6 +354,41 @@ def test_warped_quads_are_split_and_flat_ones_are_kept():
     assert "warped face(s)" in report.text()
 
 
+def test_flatness_is_judged_relative_to_the_face_size():
+    # Archicad refuses a quad warped by more than ~0.35 % of its size: a 20 cm face warped by
+    # under 1 mm is refused, a 5 m face with the same warp is fine.
+    fresh()
+    small = make_mesh("Small", [(0, 0, 0), (0.2, 0, 0), (0.2, 0.2, 0.0036), (0, 0.2, 0)], [(0, 1, 2, 3)])
+    big = make_mesh("Big", [(0, 0, 0), (5, 0, 0), (5, 5, 0.0036), (0, 5, 0)], [(0, 1, 2, 3)])
+    nearly = make_mesh("Nearly", [(0, 0, 0), (0.2, 0, 0), (0.2, 0.2, 0.00005), (0, 0.2, 0)], [(0, 1, 2, 3)])
+    push([small, big, nearly])
+    assert len(FAKE.morphs[small[me.PROP_GUID]].faces) == 2
+    assert len(FAKE.morphs[big[me.PROP_GUID]].faces) == 1
+    assert len(FAKE.morphs[nearly[me.PROP_GUID]].faces) == 1
+
+
+def test_a_split_never_puts_a_diagonal_on_an_existing_edge():
+    # Archicad refuses a body with an edge on three faces ("Failed to create morph"). The warped
+    # quad's first diagonal (0-2) is already an edge of two triangles, so the other must be used.
+    fresh()
+    verts = [(0, 0, 0), (1, 0, 0), (1, 1, 0.4), (0, 1, 0), (0.5, 0.5, -1), (0.5, 0.5, 2)]
+    faces = [(0, 1, 2, 3), (0, 2, 4), (2, 0, 5)]
+    obj = make_mesh("Shared", verts, faces)
+    report = push([obj])
+    geometry = FAKE.morphs[obj[me.PROP_GUID]]
+    assert geometry.overshared_edges() == 0, "a diagonal landed on an existing edge"
+    assert len(geometry.faces) == 4 and "warped face(s)" in report.text()
+    assert not report.warnings
+
+
+def test_an_over_shared_edge_in_the_mesh_is_warned_about():
+    fresh()
+    verts = [(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 1)]
+    obj = make_mesh("Fin", verts, [(0, 1, 2), (1, 0, 3), (0, 1, 4)])
+    report = push([obj])
+    assert any("more than two faces" in w for w in report.warnings), report.warnings
+
+
 def test_modifiers_are_applied_when_asked():
     scene = fresh()
     obj = cube()

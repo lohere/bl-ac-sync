@@ -32,6 +32,7 @@ from .acsync import (
     MorphGeometry,
     SurfaceInfo,
     SurfaceStyle,
+    face_size,
     planar_deviation,
     polygon_normal,
 )
@@ -103,6 +104,7 @@ class Extracted:
     geometry: MorphGeometry
     triangulated: int = 0  # warped faces split into triangles
     loose_edges: int = 0  # edges without a face (not sent)
+    overshared_edges: int = 0  # edges on more than two faces: Archicad will refuse the body
     unmatched: set[str] = field(default_factory=set)  # material names with no Archicad surface
 
 
@@ -112,9 +114,12 @@ def evaluated_depsgraph():
 
 
 def extract_geometry(
-    obj, depsgraph, apply_modifiers: bool, offset, resolve, tolerance: float
+    obj, depsgraph, apply_modifiers: bool, offset, resolve, flatness: float
 ) -> Extracted:
-    """The object's faces in Archicad project coordinates (world minus the model offset)."""
+    """The object's faces in Archicad project coordinates (world minus the model offset).
+
+    A face with more than three corners is split into triangles when it is warped by more than
+    ``flatness`` times its size (Archicad's own limit is about 0.0035)."""
     source = obj.evaluated_get(depsgraph) if apply_modifiers else obj
     mesh = source.to_mesh()
     try:
@@ -127,6 +132,7 @@ def extract_geometry(
         faces: list[MorphFace] = []
         out = Extracted(MorphGeometry(vertices, faces))
         materials = list(mesh.materials)
+        taken = {tuple(e.key) for e in mesh.edges}  # a new diagonal must not land on one of these
 
         def use(i: int) -> int:
             if i not in remap:
@@ -143,29 +149,62 @@ def extract_geometry(
             if material is not None and not surface:
                 out.unmatched.add(material.name)
             points = [coords[i] for i in idx]
-            if len(idx) > 3 and planar_deviation(points) > tolerance:
+            if len(idx) > 3 and planar_deviation(points) > flatness * face_size(points):
                 out.triangulated += 1
-                for tri in _triangulate(points):
+                for tri in _triangulate(points, idx, taken):
                     faces.append(MorphFace([use(idx[k]) for k in tri], surface=surface))
             else:
                 faces.append(MorphFace([use(i) for i in idx], surface=surface))
         out.loose_edges = sum(1 for e in mesh.edges if e.is_loose)
+        out.overshared_edges = out.geometry.overshared_edges()
         return out
     finally:
         source.to_mesh_clear()
 
 
-def _triangulate(points) -> list[tuple[int, int, int]]:
-    """Triangles over a (warped) polygon's corners, wound like the polygon itself."""
-    tris = tessellate_polygon([[Vector(p) for p in points]])
+def _triangulate(points, vertex_ids, taken: set) -> list[tuple[int, int, int]]:
+    """Triangles over a (warped) polygon's corners, wound like the polygon itself.
+
+    The new diagonals must not coincide with an edge the mesh already has: an edge on three
+    faces makes Archicad refuse the whole body. ``vertex_ids`` are the mesh vertex indices of the
+    corners and ``taken`` the edges in use (diagonals chosen here are added to it)."""
+    n = len(points)
     normal = polygon_normal(points)
-    result = []
-    for a, b, c in tris:
-        n = polygon_normal([points[a], points[b], points[c]])
-        if sum(x * y for x, y in zip(n, normal)) < 0:
-            b, c = c, b
-        result.append((a, b, c))
-    return result
+
+    def oriented(tris):
+        result = []
+        for a, b, c in tris:
+            tn = polygon_normal([points[a], points[b], points[c]])
+            if sum(x * y for x, y in zip(tn, normal)) < 0:
+                b, c = c, b
+            result.append((a, b, c))
+        return result
+
+    def diagonals(tris) -> set:
+        keys = set()
+        for tri in tris:
+            for a, b in ((tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])):
+                if (a - b) % n not in (1, n - 1):  # not neighbours in the polygon's loop
+                    keys.add((min(vertex_ids[a], vertex_ids[b]), max(vertex_ids[a], vertex_ids[b])))
+        return keys
+
+    def fan(start):
+        return [(start, (start + k) % n, (start + k + 1) % n) for k in range(1, n - 1)]
+
+    tessellated = oriented(tessellate_polygon([[Vector(p) for p in points]]))
+    fans = [oriented(fan(s)) for s in range(n)]
+    candidates = fans[:2] + [tessellated] + fans[2:] if n == 4 else [tessellated] + fans
+    for tris in candidates:
+        faces_ok = all(
+            sum(x * y for x, y in zip(polygon_normal([points[a], points[b], points[c]]), normal)) > 0
+            for a, b, c in tris
+        )
+        keys = diagonals(tris)
+        if faces_ok and not keys & taken:
+            taken |= keys
+            return tris
+    taken |= diagonals(tessellated)  # nothing fits: the tessellation, and the report will warn
+    return tessellated
 
 
 # -- geometry -> Blender mesh ----------------------------------------------------------------
@@ -285,7 +324,7 @@ def pull(scene, settings, msettings, api: MorphApi, dry_run: bool = False) -> en
             counts.unchanged += 1
             continue
         blender_now = extract_geometry(
-            obj, depsgraph, apply_mods, offset, resolve, msettings.planar_tolerance
+            obj, depsgraph, apply_mods, offset, resolve, msettings.flatness_ratio()
         ).geometry.fingerprint()
         if blender_now != obj.get(PROP_BL_HASH) and msettings.conflict == "SKIP":
             counts.conflicts += 1
@@ -328,7 +367,7 @@ def pull(scene, settings, msettings, api: MorphApi, dry_run: bool = False) -> en
         depsgraph = evaluated_depsgraph()
         obj[PROP_AC_HASH] = geometry.fingerprint()
         obj[PROP_BL_HASH] = extract_geometry(
-            obj, depsgraph, apply_mods, offset, resolve, msettings.planar_tolerance
+            obj, depsgraph, apply_mods, offset, resolve, msettings.flatness_ratio()
         ).geometry.fingerprint()
         report.changed_guids.append(guid)
     settings.sync_surfaces([i.name for i in infos.values() if i.name])
@@ -361,7 +400,7 @@ def push(scene, settings, msettings, api: MorphApi, objects, dry_run: bool = Fal
 
     for obj in objects:
         ex = extract_geometry(
-            obj, depsgraph, msettings.apply_modifiers, offset, resolve, msettings.planar_tolerance
+            obj, depsgraph, msettings.apply_modifiers, offset, resolve, msettings.flatness_ratio()
         )
         if not ex.geometry.faces:
             report.warnings.append(f"{obj.name}: no faces, skipped")
@@ -372,6 +411,12 @@ def push(scene, settings, msettings, api: MorphApi, objects, dry_run: bool = Fal
             report.add(f"{obj.name}: {ex.triangulated} warped face(s) were split into triangles")
         if ex.loose_edges:
             report.add(f"{obj.name}: {ex.loose_edges} edge(s) without a face were not sent")
+        if ex.overshared_edges:
+            report.warnings.append(
+                f"{obj.name}: {ex.overshared_edges} edge(s) border more than two faces. Archicad "
+                "cannot build that and will refuse the morph. Select > Select All by Trait > "
+                "Non Manifold (with 'Multiple Faces') shows them."
+            )
         guid = str(obj.get(PROP_GUID) or "").upper()
         if not guid or guid not in known:
             if guid:
@@ -427,7 +472,7 @@ def _store_sync_state(api, pairs, report, msettings, resolve, offset) -> None:
             del obj[PROP_REMOVED]
         obj[PROP_AC_HASH] = back[guid].fingerprint()
         obj[PROP_BL_HASH] = extract_geometry(
-            obj, depsgraph, msettings.apply_modifiers, offset, resolve, msettings.planar_tolerance
+            obj, depsgraph, msettings.apply_modifiers, offset, resolve, msettings.flatness_ratio()
         ).geometry.fingerprint()
         report.changed_guids.append(guid)
 

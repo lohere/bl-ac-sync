@@ -19,7 +19,8 @@ Needs **Tapir 1.8.0 or newer** (the sync from Archicad does not). Status: proof 
 Per face it carries the **material** both ways (see below), keeps **n-gons**, concave faces and
 **open meshes** (sent as Archicad *Surface* bodies), and applies **modifiers** by default so an array
 or bevel arrives as plain faces. Warped faces (Archicad faces must be flat) are split into triangles;
-the report says how many. Faces with holes that come from Archicad are split into triangles in Blender.
+the report says how many. A mesh with an edge on more than two faces is warned about, since
+Archicad cannot build it. Faces with holes that come from Archicad are split into triangles in Blender.
 
 ## Not losing work
 
@@ -75,6 +76,16 @@ No IFC is involved. The core is in `acsync/morphs.py` (no Blender), the Blender 
 * `bodyType: "Surface"` works: an open mesh (a single quad) is created and reads back as an open
   Surface. A Solid with fewer than 4 faces is refused, so the body type follows whether the mesh is
   watertight.
+* **Flatness:** a face with more than three corners is refused when it is warped by more than about
+  **0.35 % of its longest diagonal** (the same ratio at 20 cm and at 20 m; tiny faces of a few cm are
+  accepted whatever their warp). The tool splits faces beyond 0.1 % by default (setting *Flatness
+  tolerance*). An absolute millimetre limit, which was the first idea, is wrong at both ends.
+* **Shared edges:** a body with an edge on three or more faces is refused. Splitting a quad adds a
+  diagonal, and that diagonal can land on an edge the mesh already has (Blender's own *Triangulate*
+  does this too), so the tool picks the other diagonal when that happens.
+* Several separate pieces, touching or overlapping ones included, are fine in one body.
+* Every refusal reads only "Failed to create morph." Both causes above were found with Blender's
+  Suzanne, by bisecting the face list against the live Archicad.
 * A refused morph is reported inside the answer (`elements[i].error`), not as a failed request.
 * An unsaved Archicad project has no project name, only `isUntitled`.
 * Speed (local, one request each): 512 faces push in 0.3 s, 4,608 faces in 0.8 s; pulling all 12 test morphs (two of them

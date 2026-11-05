@@ -8,6 +8,7 @@ reaches 1.0; until then minor versions may change behaviour.
 - **New, experimental:** *bl-ac morphs*, a second panel that sends Blender meshes to Archicad as
   Morphs and brings Archicad morphs into Blender, both ways, with materials, conflict detection and
   a dry run. Needs Tapir 1.8.0 or newer. See [docs/MORPHS.md](docs/MORPHS.md).
+  Works with Blender's Suzanne and other meshes with warped quads and shared edges.
 
 ## 0.1.1
 

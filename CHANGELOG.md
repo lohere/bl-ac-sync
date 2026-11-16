@@ -3,7 +3,7 @@
 All notable changes. The project follows [Semantic Versioning](https://semver.org/) once it
 reaches 1.0; until then minor versions may change behaviour.
 
-## Unreleased
+## 0.2.1
 
 - **Blender 5.3** is supported (automated tests pass on 5.3.0).
 - **Morphs and the main Sync work together.** Archicad's morphs are no longer read from the IFC (option

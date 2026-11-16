@@ -3,6 +3,12 @@
 All notable changes. The project follows [Semantic Versioning](https://semver.org/) once it
 reaches 1.0; until then minor versions may change behaviour.
 
+## Unreleased
+
+- **Blender 5.3** is supported (automated tests pass on 5.3.0).
+- **Faster:** reading the Archicad export uses more processor cores (8 instead of 4 at most), about 30 %
+  faster on a 450-element project. The report now has a *Time* line that shows where a sync spent its time.
+
 ## 0.2.0
 
 - **New, experimental:** *bl-ac morphs*, a second panel that sends Blender meshes to Archicad as

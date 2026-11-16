@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 import threading
@@ -112,7 +113,21 @@ class Job:
     completeness: Completeness | None = None
     restored: list[str] = field(default_factory=list)  # leftovers of an interrupted sync, undone
     wall_end_lines: list[str] = field(default_factory=list)  # what matching wall ends did
+    timings: dict[str, float] = field(default_factory=dict)  # stage -> seconds, in order
     done: bool = False
+
+    @contextlib.contextmanager
+    def stage(self, label: str):
+        start = time.perf_counter()
+        try:
+            yield
+        finally:
+            self.timings[label] = self.timings.get(label, 0.0) + time.perf_counter() - start
+
+    def timing_text(self) -> str:
+        total = sum(self.timings.values())
+        parts = [f"{label} {sec:.1f} s" for label, sec in self.timings.items() if sec >= 0.05]
+        return f"{total:.1f} s" + (f" ({', '.join(parts)})" if parts else "")
 
 
 def _read(ifc_path: str, p: dict) -> IfcModel:
@@ -185,7 +200,8 @@ def _run_job(job: Job) -> None:
             _stage["text"] = f"Archicad is exporting '{info.project_name}'..."
             stamp = time.strftime("%Y%m%d-%H%M%S")
             temp_path = os.path.join(tempfile.gettempdir(), "acsync", f"export-{stamp}.ifc")
-            client.export_ifc(temp_path, p["translator"], p["scope"])
+            with job.stage("Archicad export"):
+                client.export_ifc(temp_path, p["translator"], p["scope"])
             ifc_path = temp_path
         else:
             ifc_path = bpy.path.abspath(p["ifc_path"]) if p["ifc_path"] else ""
@@ -193,14 +209,18 @@ def _run_job(job: Job) -> None:
                 raise AcSyncError("Choose an IFC file first.")
             job.project = os.path.basename(ifc_path)
         _stage["text"] = "Reading geometry..."
-        job.model = _read(ifc_path, p)
+        with job.stage("reading geometry"):
+            job.model = _read(ifc_path, p)
         if p["source"] == "ARCHICAD":
-            job.wall_end_lines = _match_wall_ends(client, job.model, p)
+            with job.stage("wall ends"):
+                job.wall_end_lines = _match_wall_ends(client, job.model, p)
         if p["source"] == "ARCHICAD" and p["check_completeness"]:
             _stage["text"] = "Checking completeness..."
-            job.completeness = _check(client, job.model, p)
+            with job.stage("completeness check"):
+                job.completeness = _check(client, job.model, p)
             if p["include_excluded"] and job.completeness.excluded_materials:
-                _include_excluded_materials(job, client, info, temp_path, p)
+                with job.stage("second export (excluded materials)"):
+                    _include_excluded_materials(job, client, info, temp_path, p)
     except Exception as exc:  # reported to the user on the main thread
         job.error = exc
     finally:
@@ -334,13 +354,15 @@ class ACSYNC_OT_sync(Operator):
         if job.port:
             settings.last_port = job.port  # tried first next time
         try:
-            report = engine.apply_model(
-                scene, settings, job.model, dry_run=self.dry_run,
-                detect_removed=not job.params["partial"],
-            )
+            with job.stage("applying in Blender"):
+                report = engine.apply_model(
+                    scene, settings, job.model, dry_run=self.dry_run,
+                    detect_removed=not job.params["partial"],
+                )
         except Exception as exc:
             self.report({"ERROR"}, f"Applying the model failed: {type(exc).__name__}: {exc}")
             return {"CANCELLED"}
+        report.timing = job.timing_text()
         if job.note:
             report.warnings.insert(0, job.note)
         report.warnings[:0] = job.restored

@@ -104,6 +104,20 @@ def test_second_sync_is_a_noop():
     assert before == {g: (o.data.name, len(o.data.vertices)) for g, o in objs().items()}
 
 
+def test_report_says_where_the_time_went():
+    s = fresh()
+    sync(s, ifc("a"))
+    text = bpy.data.texts[operators.REPORT_TEXT_NAME].as_string()
+    line = next((ln for ln in text.splitlines() if ln.startswith("Time: ")), "")
+    assert line.endswith(" s") or " s (" in line, text  # "Time: 0.4 s (reading geometry 0.3 s)"
+
+
+def test_geometry_threads_are_sensible():
+    from ac_sync.acsync.ifc_reader import MAX_GEOMETRY_THREADS, default_threads
+
+    assert 2 <= default_threads() <= MAX_GEOMETRY_THREADS
+
+
 def test_user_work_survives_a_geometry_update():
     s = fresh()
     sync(s, ifc("a"))

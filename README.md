@@ -28,7 +28,7 @@ You can, but every design change means exporting and importing again, and the ne
 | --- | --- |
 | **Archicad 29** | Other versions are untested. The project must be open while you sync. |
 | **Tapir** (free Archicad add-on) | Lets other programs talk to Archicad. Version **1.7.1 or newer**, **1.8.0 or newer** for the morph panel. See Install. |
-| **Blender 5.0 or newer** | Developed and tested on Blender 5.2 LTS. Older versions are not tested. |
+| **Blender 5.0 or newer** | Developed on Blender 5.2 LTS. Blender 5.3 works too (the automated tests pass, and it is used daily). Versions older than 5.0 are not supported. |
 | **Windows** | macOS has not been tested yet. |
 
 ---

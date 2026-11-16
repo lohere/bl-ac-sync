@@ -21,7 +21,7 @@ Blender installs it together with the add-on. The zip is about 43 MB.
 
 ### Constraints
 
-- **Blender 5.0 or newer, Windows x64.** The bundled wheel is for Python 3.13 (Blender 5.x). Blender
+- **Blender 5.0 or newer, Windows x64.** The bundled wheel is for Python 3.13 (Blender 5.x; checked on 5.2 and 5.3). Blender
   4.2-4.5 use Python 3.11 and would need a second wheel plus testing; macOS and Linux would need their own
   wheels (extend `PLATFORMS` in `tools/build_extension.py`).
 - **One version per repository folder.** With two versions that target the same Blender versions,

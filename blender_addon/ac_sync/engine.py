@@ -66,6 +66,7 @@ OTHER_COLLECTION = "Other"
 class Report:
     dry_run: bool = False
     diff_summary: str = ""
+    timing: str = ""  # e.g. "7.6 s (Archicad export 2.0 s, reading geometry 4.3 s)"
     lines: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     created_materials: list[str] = field(default_factory=list)
@@ -78,6 +79,8 @@ class Report:
     def text(self) -> str:
         head = ("DRY RUN - nothing was changed\n" if self.dry_run else "") + self.diff_summary
         parts = [head]
+        if self.timing:
+            parts.append(f"Time: {self.timing}")
         if self.warnings:
             parts += ["", "Warnings:"] + [f"  {w}" for w in self.warnings]
         if self.created_materials:

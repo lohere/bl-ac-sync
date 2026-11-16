@@ -239,3 +239,13 @@ def test_grouped_morphs_are_told_apart_from_the_others(fake_archicad, api):
     sent = dict(fake_archicad.calls)["GetGroupsOfElements"]["elements"]
     assert sent == [{"elementId": {"guid": "a"}}, {"elementId": {"guid": "B"}}]
     assert api.grouped([]) == set()
+
+
+def test_suspend_groups_is_read_first_and_only_set_when_it_differs(fake_archicad, api):
+    fake_archicad.handlers["GetSuspendGroupsMode"] = lambda p: fake_archicad.ok({"suspendGroups": False})
+    fake_archicad.handlers["SetSuspendGroupsMode"] = lambda p: fake_archicad.ok({})
+    assert api.set_suspend_groups(True) is False  # it was off
+    assert dict(fake_archicad.calls)["SetSuspendGroupsMode"] == {"suspendGroups": True}
+    fake_archicad.calls.clear()
+    assert api.set_suspend_groups(False) is False  # already off: nothing to set
+    assert "SetSuspendGroupsMode" not in dict(fake_archicad.calls)

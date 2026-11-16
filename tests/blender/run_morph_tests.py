@@ -35,6 +35,8 @@ class FakeArchicad:
         self.selection: list[str] = []
         self.refuse_create = False
         self.grouped_guids: set[str] = set()  # morphs that sit in an Archicad group: modify is refused
+        self.suspend = False  # Archicad's Suspend Groups mode
+        self.suspend_log: list[bool] = []
         self._n = 0
 
     def add(self, geometry, origin=(0.0, 0.0, 0.0), element_id=None):
@@ -81,10 +83,16 @@ class FakeArchicad:
     def grouped(self, guids):
         return {g for g in guids if g in self.grouped_guids}
 
+    def set_suspend_groups(self, on):
+        previous = self.suspend
+        self.suspend = on
+        self.suspend_log.append(on)
+        return previous
+
     def modify(self, items):
         out = []
         for guid, geometry, _origin in items:
-            if guid in self.grouped_guids:
+            if guid in self.grouped_guids and not self.suspend:
                 out.append(RuntimeError("Failed to modify morph."))
                 continue
             self.morphs[guid] = MorphGeometry(
@@ -598,8 +606,45 @@ def test_apply_runs_the_last_dry_run_of_a_morph_button():
     expect_error("poll", bpy.ops.acmorph.apply, "EXEC_DEFAULT")
 
 
+def test_grouped_morphs_are_changed_with_groups_suspended_and_it_is_put_back():
+    scene = fresh()
+    a, b = cube("A"), cube("B", location=(3, 0, 0))
+    push([a, b])
+    FAKE.grouped_guids.add(a[me.PROP_GUID])
+    for o in (a, b):
+        o.data.vertices[6].co.z += 1.0
+        o.data.update()
+    FAKE.suspend_log.clear()
+    report = push([a, b])
+    assert "2 updated" in report.diff_summary and not report.warnings, report.text()
+    assert FAKE.suspend_log == [True, False] and FAKE.suspend is False  # on for the change, then off again
+    assert ac_vertices(a[me.PROP_GUID]) == world_vertices(a)
+    # nothing grouped: Archicad's mode is not touched at all
+    FAKE.grouped_guids.clear()
+    FAKE.suspend_log.clear()
+    b.data.vertices[6].co.z += 1.0
+    b.data.update()
+    push([b])
+    assert FAKE.suspend_log == []
+    # the user had Suspend Groups on already: it stays on
+    FAKE.grouped_guids.add(a[me.PROP_GUID])
+    FAKE.suspend = True
+    a.data.vertices[6].co.z += 1.0
+    a.data.update()
+    push([a])
+    assert FAKE.suspend is True and FAKE.suspend_log[-1] is not False
+    # the option off: the push explains instead
+    FAKE.suspend = False
+    scene.acmorph.suspend_groups = False
+    a.data.vertices[6].co.z += 1.0
+    a.data.update()
+    off = push([a])
+    assert "1 failed" in off.diff_summary and "Suspend groups when needed" in " ".join(off.warnings)
+
+
 def test_a_refused_change_to_a_grouped_morph_names_the_group():
-    fresh()
+    scene = fresh()
+    scene.acmorph.suspend_groups = False
     a, b = cube("A"), cube("B", location=(3, 0, 0))
     push([a, b])
     FAKE.grouped_guids.add(a[me.PROP_GUID])

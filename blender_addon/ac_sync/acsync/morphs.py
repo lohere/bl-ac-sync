@@ -263,6 +263,18 @@ class MorphApi:
             return set()
         return found
 
+    def set_suspend_groups(self, on: bool) -> bool | None:
+        """Switch Archicad's Suspend Groups mode (Edit > Grouping) and return what it was, or None
+        when it could not be read or set. With groups suspended a grouped element can be changed
+        on its own."""
+        try:
+            previous = bool(self.client.addon("GetSuspendGroupsMode").get("suspendGroups", False))
+            if previous != on:
+                self.client.addon("SetSuspendGroupsMode", {"suspendGroups": on})
+        except AcSyncError:
+            return None
+        return previous
+
     def surface_names(self) -> dict[str, str]:
         """GUID -> name of every surface in the project."""
         response = self.client.addon("GetAttributesByType", {"attributeType": "Surface"})

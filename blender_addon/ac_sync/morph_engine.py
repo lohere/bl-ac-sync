@@ -584,7 +584,7 @@ def push(
         return report
 
     stored = _write_creates(api, creates, offset, report, counts)
-    stored += _write_updates(api, updates, report, counts)
+    stored += _write_updates(api, updates, report, counts, msettings.suspend_groups)
     _remember(api, stored, report)
     report.diff_summary = counts.summary("created", "updated")
     return report
@@ -624,7 +624,9 @@ def _write_creates(
     return done
 
 
-def _write_updates(api, updates: list[Planned], report, counts) -> list[tuple[Planned, str]]:
+def _write_updates(
+    api, updates: list[Planned], report, counts, suspend_groups: bool = True
+) -> list[tuple[Planned, str]]:
     if not updates:
         return []
     guids = [str(p.obj[PROP_GUID]).upper() for p in updates]
@@ -637,7 +639,8 @@ def _write_updates(api, updates: list[Planned], report, counts) -> list[tuple[Pl
             counts.updated -= 1
             counts.failed += 1
             report.warnings.append(f"{planned.obj.name}: its morph vanished from Archicad, skipped")
-    results = api.modify([(g, p.geometry, placements[g].origin) for p, g in sendable])
+    items = [(g, p.geometry, placements[g].origin) for p, g in sendable]
+    results = _modify(api, items, report, suspend_groups)
     refused = [g for (_p, g), error in zip(sendable, results) if error is not None]
     grouped = api.grouped(refused) if refused else set()
     done = []
@@ -649,13 +652,33 @@ def _write_updates(api, updates: list[Planned], report, counts) -> list[tuple[Pl
             if guid in grouped:
                 hint = (
                     " This morph is part of a group in Archicad, and Archicad does not let add-ons "
-                    "change grouped elements. Try switching on Edit > Grouping > Suspend Groups in "
-                    "Archicad, or ungroup it, and push again."
+                    "change grouped elements while groups are active. Switch on Edit > Grouping > "
+                    "Suspend Groups in Archicad, or ungroup it, and push again."
+                    + ("" if suspend_groups else " (The option 'Suspend groups when needed' does it for you.)")
                 )
             report.warnings.append(f"{planned.obj.name}: Archicad refused the change ({error}).{hint}")
         else:
             done.append((planned, guid))
     return done
+
+
+def _modify(api, items, report, suspend_groups: bool):
+    """ModifyMorphs, with Archicad's Suspend Groups switched on while grouped morphs are among
+    ``items`` (Archicad refuses to change them otherwise) and switched back right after, whatever
+    happens. The mode is a setting of the user's Archicad, so it is only touched when needed."""
+    grouped = api.grouped([g for g, _geometry, _origin in items]) if suspend_groups else set()
+    previous = api.set_suspend_groups(True) if grouped else None
+    try:
+        return api.modify(items)
+    finally:
+        if previous is False:  # it was off before: put it back
+            if api.set_suspend_groups(False) is None:
+                report.warnings.append(
+                    "Archicad's Suspend Groups could not be switched back off after the push. "
+                    "Do it in Archicad (Edit > Grouping > Suspend Groups)."
+                )
+        elif grouped and previous is None:
+            report.add("Suspend Groups could not be switched on, grouped morphs may be refused.")
 
 
 # -- collection sync -------------------------------------------------------------------------

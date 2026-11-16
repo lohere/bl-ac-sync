@@ -76,6 +76,7 @@ class ACMORPH_PT_options(_Base, Panel):
         col = self.layout.column()
         col.prop(m, "apply_modifiers")
         col.prop(m, "flatness")
+        col.prop(m, "suspend_groups")
         col.operator("acmorph.detach", icon="UNLINKED")
         col.label(text="Offset and port: see bl-ac project. Materials: see bl-ac sync")
 

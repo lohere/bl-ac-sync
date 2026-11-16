@@ -148,8 +148,11 @@ No IFC is involved. The core is in `acsync/morphs.py` (no Blender), the Blender 
 * **Grouped morphs.** A morph that is part of an Archicad group was refused by `ModifyMorphs`
   ("Failed to modify morph.") while an ungrouped copy with the same body and every surface was accepted,
   and the six ungrouped morphs of the same project synced. Tapir documents Suspend Groups for this. The
-  push asks `GetGroupsOfElements` after a refusal and says so in the warning. Switching Suspend Groups on
-  was not tested here (it needs a change of Archicad's mode), so that part is advice, not a measurement.
+  push therefore asks `GetGroupsOfElements` for the morphs it is about to change and, if any is grouped,
+  switches Suspend Groups on (`SetSuspendGroupsMode`) around the `ModifyMorphs` call and back off right
+  after, also when the call fails; a mode that was already on stays on. Option *Suspend groups when
+  needed* (Options). The refusal and the cure were seen in the live project; the automatic switching is
+  covered by the stand-in tests, and was not run against a real grouped morph by the assistant.
 * Objects (library parts) and Archicad Meshes (terrain) are not covered. `SetLibraryPartScripts` exists
   in Tapir 1.8.0, which makes generated objects possible later.
 

@@ -62,6 +62,15 @@ class ACMorphSettings(PropertyGroup):
         ),
         default=0.1, min=0.0, max=0.3, precision=3, subtype="PERCENTAGE",
     )
+    suspend_groups: BoolProperty(
+        name="Suspend groups when needed",
+        description=(
+            "Archicad does not let add-ons change an element that is part of a group. When a push "
+            "changes such a morph, switch Archicad's Suspend Groups mode on for that moment and "
+            "back off right after (it is only touched when a grouped morph is involved)"
+        ),
+        default=True,
+    )
     dry_run: BoolProperty(
         name="Dry run",
         description="Make the buttons only show what they would do. Nothing is changed",

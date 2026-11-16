@@ -227,3 +227,15 @@ def test_modify_reports_each_failure_separately(fake_archicad, api):
     assert results[0] is None and "nope" in str(results[1])
     sent = dict(fake_archicad.calls)["ModifyMorphs"]["morphsWithDetails"][0]
     assert sent["elementId"] == {"guid": "a"} and sent["xAxis"]["x"] == 1.0 and "body" in sent
+
+
+def test_grouped_morphs_are_told_apart_from_the_others(fake_archicad, api):
+    # Archicad answers an element outside any group with an error entry, a grouped one with its group.
+    fake_archicad.handlers["GetGroupsOfElements"] = lambda p: fake_archicad.ok(
+        {"groupGuids": [{"error": {"code": 1, "message": "The element is not part of any group."}},
+                        {"groupId": {"guid": "G-1"}}]}
+    )
+    assert api.grouped(["a", "B"]) == {"B"}
+    sent = dict(fake_archicad.calls)["GetGroupsOfElements"]["elements"]
+    assert sent == [{"elementId": {"guid": "a"}}, {"elementId": {"guid": "B"}}]
+    assert api.grouped([]) == set()

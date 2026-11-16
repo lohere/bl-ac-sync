@@ -145,6 +145,11 @@ No IFC is involved. The core is in `acsync/morphs.py` (no Blender), the Blender 
 * The main Sync (IFC) hands morphs to this tool, see *Together with the IFC sync*. The sync runs on the
   main thread after the IFC part, so Blender is unresponsive for the seconds the morphs take.
 * The calls run on the main thread; Blender is unresponsive while a very large mesh is sent.
+* **Grouped morphs.** A morph that is part of an Archicad group was refused by `ModifyMorphs`
+  ("Failed to modify morph.") while an ungrouped copy with the same body and every surface was accepted,
+  and the six ungrouped morphs of the same project synced. Tapir documents Suspend Groups for this. The
+  push asks `GetGroupsOfElements` after a refusal and says so in the warning. Switching Suspend Groups on
+  was not tested here (it needs a change of Archicad's mode), so that part is advice, not a measurement.
 * Objects (library parts) and Archicad Meshes (terrain) are not covered. `SetLibraryPartScripts` exists
   in Tapir 1.8.0, which makes generated objects possible later.
 

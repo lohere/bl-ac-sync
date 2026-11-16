@@ -638,12 +638,21 @@ def _write_updates(api, updates: list[Planned], report, counts) -> list[tuple[Pl
             counts.failed += 1
             report.warnings.append(f"{planned.obj.name}: its morph vanished from Archicad, skipped")
     results = api.modify([(g, p.geometry, placements[g].origin) for p, g in sendable])
+    refused = [g for (_p, g), error in zip(sendable, results) if error is not None]
+    grouped = api.grouped(refused) if refused else set()
     done = []
     for (planned, guid), error in zip(sendable, results):
         if error is not None:
             counts.updated -= 1
             counts.failed += 1
-            report.warnings.append(f"{planned.obj.name}: Archicad refused the change ({error})")
+            hint = ""
+            if guid in grouped:
+                hint = (
+                    " This morph is part of a group in Archicad, and Archicad does not let add-ons "
+                    "change grouped elements. Try switching on Edit > Grouping > Suspend Groups in "
+                    "Archicad, or ungroup it, and push again."
+                )
+            report.warnings.append(f"{planned.obj.name}: Archicad refused the change ({error}).{hint}")
         else:
             done.append((planned, guid))
     return done

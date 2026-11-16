@@ -16,6 +16,8 @@ reaches 1.0; until then minor versions may change behaviour.
 - **New:** a *bl-ac project* panel holds what both tools share: the connection to Archicad, the model
   offset and the port. Archicad is looked for when Blender starts and with every sync, so the panel no
   longer says "not checked" while the tool works.
+- A push that Archicad refuses ("Failed to modify morph.") now says when the morph is part of an Archicad
+  group, which is the likely cause, and what to try (Suspend Groups, or ungroup).
 - The *Removed* collection starts hidden, and the *Last result* blocks can be folded away.
 - **Faster:** reading the Archicad export uses more processor cores (8 instead of 4 at most), about 30 %
   faster on a 450-element project. The report now has a *Time* line that shows where a sync spent its time.

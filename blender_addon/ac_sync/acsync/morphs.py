@@ -25,7 +25,7 @@ import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
-from .errors import TapirCommandError
+from .errors import AcSyncError, TapirCommandError
 from .tapir import TapirClient
 
 Vec = tuple[float, float, float]
@@ -246,6 +246,21 @@ class MorphApi:
                 found[guid.upper()] = MorphDetails(
                     item.get("id", ""), (o.get("x", 0.0), o.get("y", 0.0), o.get("z", 0.0))
                 )
+        return found
+
+    def grouped(self, guids: Sequence[str]) -> set[str]:
+        """The morphs among ``guids`` that are part of an Archicad group. Archicad refuses to
+        change grouped elements unless Suspend Groups is on. Never raises: a failed question
+        just means "unknown"."""
+        found: set[str] = set()
+        try:
+            for chunk in _chunks(list(guids), CHUNK):
+                response = self.client.addon("GetGroupsOfElements", {"elements": _guid_items(chunk)})
+                for guid, item in zip(chunk, response.get("groupGuids", [])):
+                    if "groupId" in item:  # an element outside any group answers with an error
+                        found.add(guid.upper())
+        except AcSyncError:
+            return set()
         return found
 
     def surface_names(self) -> dict[str, str]:

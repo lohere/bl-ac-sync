@@ -34,6 +34,7 @@ class FakeArchicad:
         self.ids: dict[str, str] = {}
         self.selection: list[str] = []
         self.refuse_create = False
+        self.grouped_guids: set[str] = set()  # morphs that sit in an Archicad group: modify is refused
         self._n = 0
 
     def add(self, geometry, origin=(0.0, 0.0, 0.0), element_id=None):
@@ -77,12 +78,20 @@ class FakeArchicad:
             out.append(self.add(flipped, origin))
         return out
 
+    def grouped(self, guids):
+        return {g for g in guids if g in self.grouped_guids}
+
     def modify(self, items):
+        out = []
         for guid, geometry, _origin in items:
+            if guid in self.grouped_guids:
+                out.append(RuntimeError("Failed to modify morph."))
+                continue
             self.morphs[guid] = MorphGeometry(
                 geometry.vertices, [MorphFace(f.loop, f.holes, f.surface or GREY) for f in geometry.faces]
             )
-        return [None] * len(items)
+            out.append(None)
+        return out
 
 
 FAKE = FakeArchicad()
@@ -587,6 +596,21 @@ def test_apply_runs_the_last_dry_run_of_a_morph_button():
     assert bpy.ops.acmorph.apply("EXEC_DEFAULT") == {"FINISHED"}
     assert len(bpy.data.objects) == 1 and morph_ops.pending is None
     expect_error("poll", bpy.ops.acmorph.apply, "EXEC_DEFAULT")
+
+
+def test_a_refused_change_to_a_grouped_morph_names_the_group():
+    fresh()
+    a, b = cube("A"), cube("B", location=(3, 0, 0))
+    push([a, b])
+    FAKE.grouped_guids.add(a[me.PROP_GUID])
+    for o in (a, b):
+        o.data.vertices[6].co.z += 1.0
+        o.data.update()
+    report = push([a, b])
+    assert "1 updated" in report.diff_summary and "1 failed" in report.diff_summary, report.diff_summary
+    text = " ".join(report.warnings)
+    assert "A: Archicad refused the change" in text and "part of a group" in text and "Suspend Groups" in text
+    assert "B:" not in text  # the ungrouped one went through
 
 
 def test_the_panel_draws_and_only_uses_things_that_exist():

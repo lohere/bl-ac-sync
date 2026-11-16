@@ -6,6 +6,17 @@ reaches 1.0; until then minor versions may change behaviour.
 ## Unreleased
 
 - **Blender 5.3** is supported (automated tests pass on 5.3.0).
+- **Morphs and the main Sync work together.** Archicad's morphs are no longer read from the IFC (option
+  *Sync morphs both ways*, on by default, needs Tapir 1.8.0 or newer). Sync brings them into the morph
+  collection and syncs them both ways there, so changes made in Blender go back to Archicad, and meshes
+  made in Blender are no longer duplicated by the IFC. Morphs an older version imported as plain objects
+  are taken over on the first sync.
+- **New:** *Apply the dry run* button (both panels) carries out what a dry run showed, without exporting
+  from Archicad again.
+- **New:** a *bl-ac project* panel holds what both tools share: the connection to Archicad, the model
+  offset and the port. Archicad is looked for when Blender starts and with every sync, so the panel no
+  longer says "not checked" while the tool works.
+- The *Removed* collection starts hidden, and the *Last result* blocks can be folded away.
 - **Faster:** reading the Archicad export uses more processor cores (8 instead of 4 at most), about 30 %
   faster on a 450-element project. The report now has a *Time* line that shows where a sync spent its time.
 

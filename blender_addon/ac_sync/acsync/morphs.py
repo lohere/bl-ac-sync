@@ -200,6 +200,9 @@ class MorphApi:
 
     def __init__(self, client: TapirClient):
         self.client = client
+        # Geometries read during this operation. A two-way sync reads every morph for the pull
+        # and again for the push; Archicad only changes in between through our own writes.
+        self._read_cache: dict[str, MorphGeometry] = {}
 
     # -- reading -----------------------------------------------------------------------------
 
@@ -214,7 +217,13 @@ class MorphApi:
 
     def read(self, guids: Sequence[str]) -> dict[str, MorphGeometry]:
         found: dict[str, MorphGeometry] = {}
-        for chunk in _chunks(list(guids), CHUNK):
+        missing = []
+        for guid in guids:
+            if guid.upper() in self._read_cache:
+                found[guid.upper()] = self._read_cache[guid.upper()]
+            else:
+                missing.append(guid)
+        for chunk in _chunks(missing, CHUNK):
             response = self.client.addon(
                 "Get3DGeometryOfElements", {"elements": _guid_items(chunk)}, timeout=60.0
             )
@@ -224,7 +233,7 @@ class MorphApi:
                     f"Get3DGeometryOfElements: asked for {len(chunk)} elements, got {len(entries)}"
                 )
             for guid, entry in zip(chunk, entries):
-                found[guid.upper()] = parse_geometry(entry)
+                found[guid.upper()] = self._read_cache[guid.upper()] = parse_geometry(entry)
         return found
 
     def details(self, guids: Sequence[str]) -> dict[str, MorphDetails]:
@@ -314,6 +323,8 @@ class MorphApi:
         placement origin (see :meth:`origins`). Returns None per success, else the failure."""
         if not items:
             return []
+        for guid, _geometry, _origin in items:
+            self._read_cache.pop(guid.upper(), None)  # about to change
         data = [
             {"elementId": {"guid": guid}, **IDENTITY_AXES, "body": morph_body(geometry, origin)}
             for guid, geometry, origin in items

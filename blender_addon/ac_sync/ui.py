@@ -41,6 +41,45 @@ class _Base:
     bl_category = "bl-ac"
 
 
+class ACSYNC_PT_project(_Base, Panel):
+    """What both tools share: the connection to Archicad and the model offset."""
+
+    bl_label = "bl-ac project"
+    bl_idname = "ACSYNC_PT_project"
+
+    def draw(self, context):
+        layout = self.layout
+        state = operators.connection
+        box = layout.box()
+        row = box.row(align=True)
+        if not state.checked:
+            row.label(text="Looking for Archicad...", icon="TIME")
+        elif state.ok:
+            row.label(text=state.project, icon="CHECKMARK")
+        else:
+            row.label(text="Archicad not ready", icon="ERROR")
+        row.operator("acsync.refresh", text="", icon="FILE_REFRESH")
+        if state.checked and state.ok:
+            box.label(text=state.details)
+        if state.checked and not state.ok:
+            _lines(box, state.message)
+        for note in state.instances:
+            _lines(box, note, icon="INFO")
+
+
+class ACSYNC_PT_shared(_Base, Panel):
+    bl_label = "Shared settings"
+    bl_idname = "ACSYNC_PT_shared"
+    bl_parent_id = "ACSYNC_PT_project"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        s = context.scene.acsync
+        col = self.layout.column()
+        col.prop(s, "offset")
+        col.prop(s, "port")
+
+
 class ACSYNC_PT_main(_Base, Panel):
     bl_label = "bl-ac sync"
     bl_idname = "ACSYNC_PT_main"
@@ -54,22 +93,6 @@ class ACSYNC_PT_main(_Base, Panel):
 
         if s.source == "ARCHICAD":
             box = layout.box()
-            state = operators.connection
-            row = box.row(align=True)
-            if not state.checked:
-                row.label(text="Archicad: not checked", icon="QUESTION")
-            elif state.ok:
-                row.label(text=state.project, icon="CHECKMARK")
-            else:
-                row.label(text="Archicad not ready", icon="ERROR")
-            row.operator("acsync.refresh", text="", icon="FILE_REFRESH")
-            if state.checked and state.ok:
-                box.label(text=state.details)
-            if state.checked and not state.ok:
-                _lines(box, state.message)
-            for note in state.instances:
-                _lines(box, note, icon="INFO")
-            box.separator(factor=0.3)
             box.label(text="IFC translator")
             box.menu("ACSYNC_MT_translators", text=s.translator, icon="DOWNARROW_HLT")
             box.label(text="Export")
@@ -85,6 +108,10 @@ class ACSYNC_PT_main(_Base, Panel):
         op.dry_run = False
         op = row.operator("acsync.sync", text="Dry run", icon="VIEWZOOM")
         op.dry_run = True
+        if operators.pending is not None:
+            col.operator("acsync.apply", text="Apply the dry run", icon="CHECKMARK")
+        if s.source == "ARCHICAD":
+            layout.prop(s, "morphs")
         layout.prop(s, "select_changed")
         check = operators.last_completeness
         if s.source == "ARCHICAD" and check is not None and check.excluded_materials:
@@ -99,8 +126,10 @@ class ACSYNC_PT_main(_Base, Panel):
             layout.label(text=operators._stage["text"] or "Working...", icon="TIME")
 
         if s.last_summary:
-            box = layout.box()
-            box.label(text="Last result", icon="TEXT")
+            box = collapsible(layout, "acsync_last_result", "Last result", "TEXT")
+        else:
+            box = None
+        if box is not None:
             _lines(box, s.last_summary)
             if operators.last_changed:
                 box.operator(
@@ -132,7 +161,6 @@ class ACSYNC_PT_output(_Base, Panel):
         sub = col.column()
         sub.active = s.archicad_coordinates
         sub.prop(s, "inherit_end_surfaces")
-        col.prop(s, "offset")
         col.separator()
         col.prop(s, "generate_uvs")
         sub = col.column()
@@ -173,7 +201,6 @@ class ACSYNC_PT_advanced(_Base, Panel):
     def draw(self, context):
         s = context.scene.acsync
         col = self.layout.column()
-        col.prop(s, "port")
         col.prop(s, "check_completeness")
         sub = col.column()
         sub.active = s.check_completeness
@@ -184,6 +211,14 @@ class ACSYNC_PT_advanced(_Base, Panel):
         row.label(text=f"bl-ac sync {__version__}")
         op = row.operator("wm.url_open", text="Help", icon="URL")
         op.url = HELP_URL
+
+
+def collapsible(layout, idname: str, title: str, icon: str = "NONE"):
+    """A header that folds its content away (Blender remembers the state per panel). Returns the
+    layout to draw the content in, or None while it is folded."""
+    header, body = layout.panel(idname, default_closed=False)
+    header.label(text=title, icon=icon)
+    return body
 
 
 def _lines(layout, text: str, icon: str = "NONE") -> None:
@@ -210,6 +245,8 @@ def _wrap(text: str, width: int) -> list[str]:
 CLASSES = (
     ACSYNC_UL_surfaces,
     ACSYNC_MT_translators,
+    ACSYNC_PT_project,
+    ACSYNC_PT_shared,
     ACSYNC_PT_main,
     ACSYNC_PT_output,
     ACSYNC_PT_materials,

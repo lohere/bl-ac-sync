@@ -203,6 +203,7 @@ def _guids(client: TapirClient, element_type: str, filters: list[str] | None = N
 
 def _check(client: TapirClient, model: IfcModel, check_meshes: bool = False) -> Completeness:
     in_ifc = {g.upper() for g in model.elements if not g.startswith("ifc:")}
+    in_ifc |= model.handled_elsewhere  # left out on purpose (the morph tool owns them)
     result = Completeness(checked=True)
     missing_raw: list[tuple[str, str]] = []  # (guid, archicad type)
     for element_type in CHECKED_TYPES:

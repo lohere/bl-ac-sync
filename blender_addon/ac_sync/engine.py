@@ -122,8 +122,27 @@ def type_collection(root: bpy.types.Collection, ifc_type: str) -> bpy.types.Coll
     return _get_or_create_collection(f"{root.name} - {label}", root)
 
 
-def removed_collection(root: bpy.types.Collection) -> bpy.types.Collection:
-    return _get_or_create_collection(f"{root.name} - Removed", root)
+def _hide_in_view_layers(scene: bpy.types.Scene, collection: bpy.types.Collection) -> None:
+    """Switch the eye off for ``collection`` in every view layer of the scene."""
+    def walk(layer_collection):
+        if layer_collection.collection is collection:
+            layer_collection.hide_viewport = True
+        for child in layer_collection.children:
+            walk(child)
+
+    for view_layer in scene.view_layers:
+        walk(view_layer.layer_collection)
+
+
+def removed_collection(root: bpy.types.Collection, scene=None) -> bpy.types.Collection:
+    """The collection for objects deleted in Archicad. It starts hidden (a new one only: if you
+    show it later, it stays shown)."""
+    name = f"{root.name} - Removed"
+    is_new = bpy.data.collections.get(name) is None
+    collection = _get_or_create_collection(name, root)
+    if is_new and scene is not None:
+        _hide_in_view_layers(scene, collection)
+    return collection
 
 
 # -- scene records ---------------------------------------------------------------------------
@@ -298,7 +317,7 @@ def _restore_if_removed(obj, element, root):
             type_collection(root, element.ifc_type).objects.link(obj)
 
 
-def _handle_removed(record, obj, policy, root, report):
+def _handle_removed(record, obj, policy, root, report, scene=None):
     label = record.element_id or record.guid
     if obj.get(PROP_REMOVED):
         return  # already handled in an earlier sync
@@ -311,11 +330,11 @@ def _handle_removed(record, obj, policy, root, report):
         return
     obj[PROP_REMOVED] = True
     if policy == "MOVE":
-        target = removed_collection(root)
+        target = removed_collection(root, scene)
         for coll in list(obj.users_collection):
             coll.objects.unlink(obj)
         target.objects.link(obj)
-        report.add(f"{label}: removed in Archicad, moved to '{target.name}'")
+        report.add(f"{label}: removed in Archicad, moved to '{target.name}' (hidden)")
     elif policy == "HIDE":
         obj.hide_set(True)
         obj.hide_render = True
@@ -328,6 +347,8 @@ def plan(
     scene, settings, model: IfcModel, detect_removed: bool = True
 ) -> tuple[Diff, dict[str, bpy.types.Object]]:
     objects = managed_objects(settings.root_collection)
+    # Elements the morph tool owns are not ours to compare: not changed, and above all not "removed".
+    objects = {g: o for g, o in objects.items() if g.upper() not in model.handled_elsewhere}
     records = scene_records(objects, tuple(settings.offset), model.uv_scale)
     return compute_diff(model.elements, records, detect_removed), objects
 
@@ -372,7 +393,7 @@ def apply_model(
     for element in diff.unchanged:
         _restore_if_removed(objects[element.guid], element, root)
     for record in removed:
-        _handle_removed(record, objects[record.guid], settings.removed_policy, root, report)
+        _handle_removed(record, objects[record.guid], settings.removed_policy, root, report, scene)
 
     settings.sync_surfaces(model.surface_names())
     return report

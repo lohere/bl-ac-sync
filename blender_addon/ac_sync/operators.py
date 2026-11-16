@@ -11,17 +11,20 @@ import time
 from dataclasses import dataclass, field
 
 import bpy
+from bpy.app.handlers import persistent
 from bpy.props import BoolProperty, StringProperty
 from bpy.types import Operator
 
 from . import engine
 from .acsync import (
     DEFAULT_EXCLUDED_TYPES,
+    MORPH_MIN_TAPIR_VERSION,
     PARTIAL_SCOPES,
     UNEXPECTED_ANSWER,
     AcSyncError,
     Completeness,
     IfcModel,
+    MorphApi,
     TapirClient,
     apply_inherited_end_surfaces,
     check_completeness,
@@ -31,7 +34,7 @@ from .acsync import (
     restore_pending,
     scan_ports,
 )
-from .acsync.tapir import DEFAULT_PORT
+from .acsync.tapir import DEFAULT_PORT, parse_version
 
 REPORT_TEXT_NAME = "bl-ac sync Report"
 
@@ -54,6 +57,7 @@ last_completeness: Completeness | None = None  # result of the last Archicad syn
 last_changed: list[str] = []  # GUIDs of the objects the last sync/dry run added or changed
 _busy = threading.Event()
 _stage = {"text": ""}
+pending = None  # the last dry run (a Job), which "Apply" can carry out without asking Archicad again
 
 
 def is_busy() -> bool:
@@ -102,6 +106,25 @@ def _excluded_types(params: dict) -> set[str]:
     return excluded
 
 
+def _find_morphs(job, client, info) -> None:
+    """Ask Archicad which elements are Morphs. The morph tool owns those (two-way), so the IFC
+    read leaves them out; without this they would come in twice, once per tool."""
+    if not job.params["morphs"]:
+        return
+    needed = ".".join(map(str, MORPH_MIN_TAPIR_VERSION))
+    if parse_version(info.tapir_version) < MORPH_MIN_TAPIR_VERSION:
+        job.morph_note = (
+            f"Morphs come in as plain objects: syncing them both ways needs Tapir {needed} or newer "
+            f"(found {info.tapir_version})."
+        )
+        return
+    try:
+        job.params["morph_guids"] = set(MorphApi(client).list_guids())
+        job.morph_sync = True
+    except AcSyncError as exc:
+        job.morph_note = f"Morphs come in as plain objects: could not list them ({exc})."
+
+
 @dataclass
 class Job:
     params: dict
@@ -114,6 +137,10 @@ class Job:
     restored: list[str] = field(default_factory=list)  # leftovers of an interrupted sync, undone
     wall_end_lines: list[str] = field(default_factory=list)  # what matching wall ends did
     timings: dict[str, float] = field(default_factory=dict)  # stage -> seconds, in order
+    info: object | None = None  # ArchicadInfo of the project that was synced
+    translators: list[str] = field(default_factory=list)
+    morph_sync: bool = False  # the morph tool takes over the morphs: sync them after the IFC
+    morph_note: str = ""
     done: bool = False
 
     @contextlib.contextmanager
@@ -136,6 +163,7 @@ def _read(ifc_path: str, p: dict) -> IfcModel:
         excluded_types=_excluded_types(p),
         archicad_coordinates=p["archicad_coordinates"],
         uv_scale=p["uv_scale"],
+        skip_guids=p.get("morph_guids") or (),
     )
 
 
@@ -195,8 +223,11 @@ def _run_job(job: Job) -> None:
             client, job.note = _pick_client(p["port"], p["last_port"])
             job.port = client.port
             info = client.require_tapir_version()
+            job.info = info
             job.project = info.project_name
             job.restored = restore_pending(client, info.project_path)
+            job.translators = client.list_ifc_translators()
+            _find_morphs(job, client, info)
             _stage["text"] = f"Archicad is exporting '{info.project_name}'..."
             stamp = time.strftime("%Y%m%d-%H%M%S")
             temp_path = os.path.join(tempfile.gettempdir(), "acsync", f"export-{stamp}.ifc")
@@ -250,6 +281,7 @@ def _snapshot(settings) -> dict:
         "check_completeness": settings.check_completeness,
         "include_excluded": settings.include_excluded_materials,
         "keep_ifc": settings.keep_ifc,
+        "morphs": settings.morphs and settings.source == "ARCHICAD",
     }
 
 
@@ -295,6 +327,7 @@ class ACSYNC_OT_sync(Operator):
 
     def execute(self, context):
         job = Job(_snapshot(context.scene.acsync))
+        _forget_pending()
         _busy.set()
         try:
             _run_job(job)
@@ -306,6 +339,7 @@ class ACSYNC_OT_sync(Operator):
         if self.blocking:
             return self.execute(context)
         self._job = Job(_snapshot(context.scene.acsync))
+        _forget_pending()
         _busy.set()
         _stage["text"] = "Starting..."
         threading.Thread(target=_run_job, args=(self._job,), daemon=True).start()
@@ -341,47 +375,101 @@ class ACSYNC_OT_sync(Operator):
         _redraw(context)
 
     def _finish(self, context, job: Job):
-        if job.error is not None:
-            message = str(job.error)
-            if not isinstance(job.error, AcSyncError):
-                message = f"{type(job.error).__name__}: {job.error}"
-            self.report({"ERROR"}, message)
-            connection.ok = False
-            connection.message = message
-            return {"CANCELLED"}
-        scene = context.scene
-        settings = scene.acsync
-        if job.port:
-            settings.last_port = job.port  # tried first next time
-        try:
-            with job.stage("applying in Blender"):
-                report = engine.apply_model(
-                    scene, settings, job.model, dry_run=self.dry_run,
-                    detect_removed=not job.params["partial"],
-                )
-        except Exception as exc:
-            self.report({"ERROR"}, f"Applying the model failed: {type(exc).__name__}: {exc}")
-            return {"CANCELLED"}
-        report.timing = job.timing_text()
-        if job.note:
-            report.warnings.insert(0, job.note)
-        report.warnings[:0] = job.restored
-        report.lines[:0] = job.wall_end_lines
-        check = job.completeness
-        global last_completeness
-        last_completeness = check
-        settings.last_check = check.summary() if check and check.checked else ""
-        settings.last_check_ok = bool(check is None or not check.checked or check.ok)
-        if check is not None and check.checked and check.has_findings:
-            # Unexpected gaps are warnings; hidden-in-Archicad ones are only information.
-            target = report.warnings if not check.ok else report.lines
-            target.extend(check.lines())
-        _store_report(settings, report, job.project)
-        last_changed[:] = report.changed_guids
-        self.report({"INFO"}, ("Dry run: " if self.dry_run else "Sync done: ") + report.diff_summary)
-        if settings.select_changed and last_changed:
-            _select_last_changed(self, context)
-        return {"FINISHED"}
+        return _complete(self, context, job, self.dry_run)
+
+
+def _forget_pending() -> None:
+    """A new sync replaces whatever dry run was waiting to be applied."""
+    global pending
+    pending = None
+
+
+def _complete(op, context, job: Job, dry_run: bool):
+    """Main-thread half of a sync (and of "Apply"): put the model in the scene, sync the morphs,
+    write the report. ``op`` only supplies ``report()``."""
+    global pending, last_completeness
+    if job.error is not None:
+        message = str(job.error)
+        if not isinstance(job.error, AcSyncError):
+            message = f"{type(job.error).__name__}: {job.error}"
+        op.report({"ERROR"}, message)
+        connection.ok = False
+        connection.message = message
+        return {"CANCELLED"}
+    scene = context.scene
+    settings = scene.acsync
+    if job.info is not None:
+        _show_connected(settings, job.info, job.port, job.translators, job.note, job.restored)
+    elif job.port:
+        settings.last_port = job.port  # tried first next time
+    try:
+        with job.stage("applying in Blender"):
+            report = engine.apply_model(
+                scene, settings, job.model, dry_run=dry_run,
+                detect_removed=not job.params["partial"],
+            )
+    except Exception as exc:
+        op.report({"ERROR"}, f"Applying the model failed: {type(exc).__name__}: {exc}")
+        return {"CANCELLED"}
+    if job.morph_sync:
+        with job.stage("morphs"):
+            _sync_morphs(context, report, dry_run)
+    report.timing = job.timing_text()
+    if job.note:
+        report.warnings.insert(0, job.note)
+    if job.morph_note:
+        report.warnings.append(job.morph_note)
+    report.warnings[:0] = job.restored
+    report.lines[:0] = job.wall_end_lines
+    check = job.completeness
+    last_completeness = check
+    settings.last_check = check.summary() if check and check.checked else ""
+    settings.last_check_ok = bool(check is None or not check.checked or check.ok)
+    if check is not None and check.checked and check.has_findings:
+        # Unexpected gaps are warnings; hidden-in-Archicad ones are only information.
+        target = report.warnings if not check.ok else report.lines
+        target.extend(check.lines())
+    _store_report(settings, report, job.project)
+    last_changed[:] = report.changed_guids
+    pending = job if dry_run and job.model is not None else None
+    op.report({"INFO"}, ("Dry run: " if dry_run else "Sync done: ") + report.diff_summary)
+    if settings.select_changed and last_changed:
+        _select_last_changed(op, context)
+    return {"FINISHED"}
+
+
+def _sync_morphs(context, report: engine.Report, dry_run: bool) -> None:
+    """Two-way sync of the morph collection, as part of the main Sync. A problem here is a
+    warning: the IFC half already succeeded."""
+    from . import morph_ops  # morph_ops imports this module
+
+    try:
+        morphs = morph_ops.sync_everything(context, dry_run)
+    except AcSyncError as exc:
+        report.warnings.append(f"Morphs: {exc}")
+        return
+    report.diff_summary += f". Morphs - {morphs.diff_summary}"
+    report.lines += [f"Morph: {line}" for line in morphs.lines]
+    report.warnings += [w if w.startswith("Morph") else f"Morph {w}" for w in morphs.warnings]
+    report.created_materials += [m for m in morphs.created_materials if m not in report.created_materials]
+    report.missing_materials += [m for m in morphs.missing_materials if m not in report.missing_materials]
+
+
+class ACSYNC_OT_apply(Operator):
+    bl_idname = "acsync.apply"
+    bl_label = "Apply"
+    bl_description = (
+        "Carry out what the last dry run showed, without exporting from Archicad again. Changes "
+        "made in Archicad since the dry run arrive with the next sync"
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return pending is not None and not _busy.is_set()
+
+    def execute(self, context):
+        return _complete(self, context, pending, dry_run=False)
 
 
 @dataclass
@@ -393,8 +481,44 @@ class Check:
     translators: list[str] = field(default_factory=list)
     note: str = ""
     restored: list[str] = field(default_factory=list)
+    restore: bool = True  # undo leftovers of an interrupted sync (not on the automatic check)
     error: Exception | None = None
     done: bool = False
+
+
+def _show_connected(settings, info, port, translators, note="", restored=()) -> None:
+    """Record that Archicad answered, so the panel shows it (also after a plain sync)."""
+    if port:
+        settings.last_port = port
+    if translators:
+        settings.translators.clear()
+        for name in sorted(translators):
+            settings.translators.add().name = name
+    connection.checked = True
+    connection.ok = True
+    connection.project = info.project_name or "untitled"
+    connection.details = f"Archicad {info.archicad_version}, Tapir {info.tapir_version}"
+    connection.message = f"{connection.project} - {connection.details}"
+    connection.instances = ([note] if note else []) + list(restored)
+
+
+def startup_check() -> None:
+    """Look for Archicad once, when Blender starts or a file is opened, so the panel says what
+    is going on instead of "not checked". Quiet: no error, nothing is changed in Archicad."""
+    try:
+        settings = bpy.context.scene.acsync
+        check = Check(settings.port, settings.last_port, restore=False)
+        _run_check(check)
+        connection.checked = True
+        if check.error is None:
+            _show_connected(
+                settings, check.info, check.found_port, check.translators, check.note
+            )
+        else:
+            connection.ok = False
+            connection.message = str(check.error)
+    except Exception:
+        pass
 
 
 def _run_check(check: Check) -> None:
@@ -404,7 +528,8 @@ def _run_check(check: Check) -> None:
         client, check.note = _pick_client(check.port, check.hint)
         check.found_port = client.port
         check.info = client.require_tapir_version()
-        check.restored = restore_pending(client, check.info.project_path)
+        if check.restore:
+            check.restored = restore_pending(client, check.info.project_path)
         check.translators = client.list_ifc_translators()
     except Exception as exc:
         check.error = exc
@@ -466,16 +591,9 @@ class ACSYNC_OT_refresh(Operator):
             connection.instances = []
             self.report({"ERROR"}, str(check.error))
             return {"CANCELLED"}
-        info = check.info
-        settings.last_port = check.found_port
-        settings.translators.clear()
-        for name in sorted(check.translators):
-            settings.translators.add().name = name
-        connection.ok = True
-        connection.project = info.project_name or "untitled"
-        connection.details = f"Archicad {info.archicad_version}, Tapir {info.tapir_version}"
-        connection.message = f"{connection.project} - {connection.details}"
-        connection.instances = ([check.note] if check.note else []) + check.restored
+        _show_connected(
+            settings, check.info, check.found_port, check.translators, check.note, check.restored
+        )
         if settings.translator not in check.translators:
             self.report(
                 {"WARNING"}, f"Translator '{settings.translator}' not found in this project."
@@ -586,6 +704,7 @@ class ACSYNC_OT_copy_report(Operator):
 
 CLASSES = (
     ACSYNC_OT_sync,
+    ACSYNC_OT_apply,
     ACSYNC_OT_refresh,
     ACSYNC_OT_apply_material_map,
     ACSYNC_OT_copy_report,
@@ -595,11 +714,28 @@ CLASSES = (
 )
 
 
+@persistent
+def _on_file_loaded(*_args):
+    bpy.app.timers.register(_once, first_interval=1.0)
+
+
+def _once():
+    startup_check()
+    # returns None: a timer that does not repeat
+
+
 def register():
     for cls in CLASSES:
         bpy.utils.register_class(cls)
+    if _on_file_loaded not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(_on_file_loaded)
+    bpy.app.timers.register(_once, first_interval=1.0)  # Blender just started
 
 
 def unregister():
+    if _on_file_loaded in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(_on_file_loaded)
+    if bpy.app.timers.is_registered(_once):
+        bpy.app.timers.unregister(_once)
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

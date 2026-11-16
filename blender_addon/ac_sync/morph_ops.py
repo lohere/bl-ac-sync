@@ -24,6 +24,7 @@ from .acsync import (
 from .acsync.tapir import parse_version
 
 REPORT_TEXT_NAME = "bl-ac morphs Report"
+pending: tuple[str, dict] | None = None  # the last dry run: (operator name, its settings)
 
 
 class ACMorphSettings(PropertyGroup):
@@ -83,8 +84,18 @@ def _connect(context) -> tuple[MorphApi, str]:
             "Download it from https://github.com/ENZYME-APD/tapir-archicad-automation/releases "
             "and restart Archicad."
         )
-    settings.last_port = client.port
+    operators._show_connected(settings, info, client.port, [], note)
     return MorphApi(client), note
+
+
+def sync_everything(context, dry_run: bool) -> engine.Report:
+    """The morph half of the main Sync button: see ``morph_engine.sync_all``."""
+    scene = context.scene
+    api, note = _connect(context)
+    report = morph_engine.sync_all(scene, scene.acsync, scene.acmorph, api, dry_run)
+    if note:
+        report.warnings.insert(0, note)
+    return report
 
 
 def _store_report(msettings, report: engine.Report, title: str) -> None:
@@ -128,6 +139,7 @@ class _MorphOperator(Operator):
         return text
 
     def execute(self, context):
+        global pending
         try:
             api, note = _connect(context)
             report = self.run(context, api)
@@ -139,6 +151,13 @@ class _MorphOperator(Operator):
         if note:
             report.warnings.insert(0, note)
         _store_report(context.scene.acmorph, report, self.bl_label)
+        if self.dry_run:
+            scope = getattr(self, "scope", None)
+            name = self.bl_idname.split("_OT_")[-1].lower()  # "ACMORPH_OT_pull" or "acmorph.pull"
+            name = name.split(".")[-1]
+            pending = (name, {"scope": scope} if scope else {})
+        else:
+            pending = None
         self.report({"INFO"}, f"{self.bl_label}: {report.diff_summary}")
         return {"FINISHED"}
 
@@ -213,7 +232,7 @@ class ACMORPH_OT_sync(_MorphOperator):
         "Two-way sync of the morph collection in one click: bring the Archicad changes into the "
         "morphs that are already in it, then send everything new or changed in Blender. Morphs "
         "that changed on both sides are skipped and listed. New Archicad morphs are not imported "
-        "(use Pull for that)."
+        "(the Sync button of the bl-ac sync panel and Pull do that)."
     )
     bl_options = {"REGISTER", "UNDO"}
 
@@ -227,6 +246,21 @@ class ACMORPH_OT_sync(_MorphOperator):
         )
         pushed = morph_engine.push(scene, scene.acsync, m, api, objects, self.dry_run, "SKIP")
         return morph_engine.merge_reports(pulled, pushed)
+
+
+class ACMORPH_OT_apply(Operator):
+    bl_idname = "acmorph.apply"
+    bl_label = "Apply"
+    bl_description = "Do for real what the last dry run showed (the same button, without the dry run)"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return pending is not None and not operators.is_busy()
+
+    def execute(self, context):
+        name, kwargs = pending
+        return getattr(bpy.ops.acmorph, name)("EXEC_DEFAULT", dry_run=False, **kwargs)
 
 
 class ACMORPH_OT_detach(Operator):
@@ -269,6 +303,7 @@ CLASSES = (
     ACMORPH_OT_pull,
     ACMORPH_OT_push,
     ACMORPH_OT_sync,
+    ACMORPH_OT_apply,
     ACMORPH_OT_detach,
     ACMORPH_OT_copy_report,
 )

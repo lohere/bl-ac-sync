@@ -87,8 +87,39 @@ def detach(objects) -> int:
 
 
 def can_push(obj: bpy.types.Object) -> bool:
-    """Plain mesh objects. Objects the IFC sync manages are Archicad walls, slabs ... not morphs."""
+    """Plain mesh objects. Objects the IFC sync manages are Archicad walls, slabs ... not morphs
+    (a morph the IFC sync brought in is adopted by the first pull, see ``adopt``)."""
     return obj.type == "MESH" and not obj.get(engine.PROP_GUID)
+
+
+_IFC_KEYS = (
+    engine.PROP_ROOT, engine.PROP_GUID, engine.PROP_HASH, engine.PROP_OFFSET, engine.PROP_UV,
+    engine.PROP_REMOVED,
+)
+
+
+def ifc_objects() -> dict[str, bpy.types.Object]:
+    """Objects the IFC sync made, by upper-case Archicad GUID, that the morph tool does not know yet.
+    A morph that came in through the IFC sync (an older version of this add-on did that) is one."""
+    found: dict[str, bpy.types.Object] = {}
+    for obj in bpy.data.objects:
+        guid = obj.get(engine.PROP_GUID)
+        if guid and not obj.get(PROP_GUID):
+            found.setdefault(str(guid).upper(), obj)
+    return found
+
+
+def adopt(obj: bpy.types.Object, guid: str, collection: bpy.types.Collection) -> None:
+    """Hand an IFC-synced object over to the morph tool: it stops being the IFC sync's (which
+    would ignore it or flag it as removed) and becomes two-way. Name, modifiers, material
+    choices and so on stay; it moves into the morph collection."""
+    for key in _IFC_KEYS:
+        if key in obj:
+            del obj[key]
+    obj[PROP_GUID] = guid
+    for coll in list(obj.users_collection):
+        coll.objects.unlink(obj)
+    collection.objects.link(obj)
 
 
 # -- surfaces <-> materials ------------------------------------------------------------------
@@ -305,12 +336,14 @@ class Counts:
     newer_other_side: int = 0  # the other side changed, this direction has nothing to send
     failed: int = 0
     removed: int = 0
+    adopted: int = 0  # made by the IFC sync before, two-way from now on
 
     def summary(self, verb_new: str, verb_update: str) -> str:
         parts = [f"{self.created} {verb_new}", f"{self.updated} {verb_update}",
                  f"{self.unchanged} unchanged"]
         for n, label in (
             (self.conflicts, "conflict(s) skipped"),
+            (self.adopted, "taken over from the IFC sync"),
             (self.newer_other_side, "changed on the other side only"),
             (self.failed, "failed"),
             (self.removed, "gone from Archicad"),
@@ -348,15 +381,24 @@ def pull(
         wanted = [g for g in wanted if g in only]
     geometries = api.read(wanted)
     objects = morph_objects()
+    ifc_owned = ifc_objects()
     shared = shared_guids()
     depsgraph = evaluated_depsgraph()
     resolve = surface_resolver(settings, {n: g for g, n in api.surface_names().items()})
     flatness = msettings.flatness_ratio()
+    adopting: set[str] = set()
 
     todo: list[tuple[str, MorphGeometry, bpy.types.Object | None]] = []
     for guid in wanted:
         geometry = geometries[guid]
         obj = objects.get(guid)
+        if obj is None and guid in ifc_owned:
+            # The IFC sync brought this morph in earlier. Archicad's version wins once; after
+            # that the object is synced like any other morph.
+            todo.append((guid, geometry, ifc_owned[guid]))
+            adopting.add(guid)
+            counts.adopted += 1
+            continue
         if obj is None:
             todo.append((guid, geometry, None))
             counts.created += 1
@@ -396,7 +438,9 @@ def pull(
     report.diff_summary = counts.summary("new", "changed")
     if dry_run:
         for guid, _geometry, obj in todo:
-            report.add(f"{obj.name if obj else guid}: would be {'changed' if obj else 'added'}")
+            what = "taken over from the IFC sync" if guid in adopting else (
+                "changed" if obj else "added")
+            report.add(f"{obj.name if obj else guid}: would be {what}")
     if dry_run or not todo:
         return report
 
@@ -406,7 +450,10 @@ def pull(
     collection = morph_collection(scene, msettings.collection)
     written: list[tuple[str, MorphGeometry, bpy.types.Object]] = []
     for guid, geometry, obj in todo:
-        if obj is None:
+        if guid in adopting:
+            adopt(obj, guid, collection)
+            report.add(f"{obj.name}: taken over from the IFC sync, its mesh now follows the morph")
+        elif obj is None:
             d = details.get(guid)
             name = (d.element_id if d else "") or guid
             obj = bpy.data.objects.new(name, bpy.data.meshes.new(name))
@@ -609,6 +656,20 @@ def collection_objects(name: str) -> list[bpy.types.Object]:
     """The pushable mesh objects of a collection, sub-collections included."""
     collection = bpy.data.collections.get(name)
     return [o for o in collection.all_objects if can_push(o)] if collection else []
+
+
+def sync_all(scene, settings, msettings, api: MorphApi, dry_run: bool = False) -> engine.Report:
+    """The two-way sync that goes with the main Sync button: every Archicad morph comes into the
+    morph collection (new ones are created, changed ones updated, those the IFC sync made
+    earlier are taken over), then every new or changed mesh in the collection goes to Archicad.
+    Morphs changed on both sides are skipped and listed."""
+    pulled = pull(scene, settings, msettings, api, dry_run, scope="ALL", conflict="SKIP")
+    objects = collection_objects(msettings.collection)
+    if objects:
+        pushed = push(scene, settings, msettings, api, objects, dry_run, "SKIP")
+    else:
+        pushed = engine.Report(dry_run=dry_run, diff_summary="nothing in the collection")
+    return merge_reports(pulled, pushed)
 
 
 def _merge_warnings(warnings: list[str]) -> list[str]:

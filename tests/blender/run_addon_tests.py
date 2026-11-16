@@ -104,6 +104,94 @@ def test_second_sync_is_a_noop():
     assert before == {g: (o.data.name, len(o.data.vertices)) for g, o in objs().items()}
 
 
+def test_morphs_left_to_the_morph_tool_are_neither_read_nor_removed():
+    s = fresh()
+    sync(s, ifc("a"))
+    wall = objs()[WALL_GUID]
+    model = read_ifc(ifc("a"), skip_guids=[WALL_GUID.lower()])
+    assert model.handled_elsewhere == {WALL_GUID.upper()} and WALL_GUID not in model.elements
+    summary = engine.apply_model(bpy.context.scene, s, model).diff_summary
+    assert "0 removed" in summary, summary
+    assert objs()[WALL_GUID] is wall and not wall.get("acsync_removed")
+    s = fresh()  # and a first sync does not create it at all
+    engine.apply_model(bpy.context.scene, s, model)
+    assert WALL_GUID not in objs() and SLAB_GUID in objs()
+
+
+def test_apply_carries_out_the_last_dry_run_without_reading_again():
+    s = fresh()
+    sync(s, ifc("a"), dry=True)
+    assert operators.pending is not None and not objs()
+    assert bpy.ops.acsync.apply("EXEC_DEFAULT") == {"FINISHED"}
+    assert set(objs()) == {WALL_GUID, SLAB_GUID, WINDOW_GUID} and operators.pending is None
+    try:
+        bpy.ops.acsync.apply("EXEC_DEFAULT")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("Apply must not be available twice")
+    sync(s, ifc("a"), dry=True)
+    sync(s, ifc("a"))  # a real sync replaces the waiting dry run
+    assert operators.pending is None
+
+
+def test_the_removed_collection_starts_hidden():
+    s = fresh()
+    sync(s, ifc("a"))
+    sync(s, ifc("nowin"))
+    coll = bpy.data.collections[ROOT_NAME + " - Removed"]
+    layer = next(c for c in bpy.context.view_layer.layer_collection.children[ROOT_NAME].children
+                 if c.collection is coll)
+    assert layer.hide_viewport, "the Removed collection should start hidden"
+    layer.hide_viewport = False  # the user shows it: a later sync keeps that
+    sync(s, ifc("a"))
+    sync(s, ifc("nowin"))
+    assert not layer.hide_viewport
+
+
+def test_a_sync_shows_that_archicad_was_found():
+    from types import SimpleNamespace
+
+    s = fresh()
+    operators.connection.checked = False
+    info = SimpleNamespace(project_name="Villa", archicad_version=29, tapir_version="1.8.0")
+    operators._show_connected(s, info, 19723, ["B", "A"])
+    state = operators.connection
+    assert state.checked and state.ok and state.project == "Villa" and "Tapir 1.8.0" in state.details
+    assert [t.name for t in s.translators] == ["A", "B"] and s.last_port == 19723
+    real = operators._run_check
+    operators._run_check = lambda check: setattr(check, "error", RuntimeError("no Archicad"))
+    try:
+        state.checked = False
+        operators.startup_check()
+    finally:
+        operators._run_check = real
+    assert state.checked and not state.ok  # said quietly, no exception
+
+
+def test_the_panels_draw_and_only_use_things_that_exist():
+    from unittest.mock import MagicMock
+
+    from ac_sync import ui
+
+    s = fresh()
+    s.last_summary = "something"
+    bpy.data.texts.new(operators.REPORT_TEXT_NAME)
+    operators.pending = object()
+    for panel in (ui.ACSYNC_PT_project, ui.ACSYNC_PT_shared, ui.ACSYNC_PT_main,
+                  ui.ACSYNC_PT_output, ui.ACSYNC_PT_advanced):
+        layout = MagicMock()
+        layout.panel.return_value = (layout, layout)
+        panel.draw(type("Self", (), {"layout": layout}), bpy.context)
+        for call in layout.mock_calls:
+            if call[0].endswith("operator") or ".operator" in call[0]:
+                module, name = call.args[0].split(".")
+                assert hasattr(getattr(bpy.ops, module), name), call.args[0]
+            if call[0].endswith("prop") or call[0].endswith("prop_search"):
+                assert hasattr(s, call.args[1]), call.args[1]
+    operators.pending = None
+
+
 def test_report_says_where_the_time_went():
     s = fresh()
     sync(s, ifc("a"))

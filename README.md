@@ -69,9 +69,9 @@ If you installed from the repository: open **Edit > Preferences > Get Extensions
 
 1. Have your project opened in Archicad. **Close any open dialog** (an open dialog blocks Archicad from answering).
 2. In Blender, open the sidebar (**N**) and the **bl-ac** tab.
-3. Click the small **refresh icon** next to "Archicad". You should see your project name.
-4. Click **Dry run** to preview, or **Sync** to import. Tick **Select changed objects** to have the added and changed objects selected afterwards (or press **Select changed** under Last result).
-5. Look at **Last result** in the panel. If the tool says elements did not arrive, press **Copy report** to see which ones and why.
+3. The **bl-ac project** panel at the top shows your project name once Archicad is found. It looks by itself when Blender starts and with every sync; the refresh icon looks again.
+4. Click **Dry run** to preview, then **Apply the dry run** to carry it out without exporting again, or click **Sync** to import straight away. Tick **Select changed objects** to have the added and changed objects selected afterwards (or press **Select changed** under Last result).
+5. Look at **Last result** in the panel (click its title to fold it away). If the tool says elements did not arrive, press **Copy report** to see which ones and why.
 
 Everything the tool creates goes into one collection called **bl-ac sync** (with sub-collections for walls, slabs, windows and so on). The first sync takes a few seconds for a mid-sized model.
 
@@ -85,7 +85,7 @@ After a design change in Archicad, just press **Sync** again.
 - Applied modifiers, custom names, parenting are kept.
 - Nothing is touched outside the **bl-ac sync** collection. This means that if you change an object's geometry in Blender, then change the same object in Archicad, it will be overwritten. It's recommended to take the modified object out of the collection.
 - UV maps are regenerated after each sync.
-- Deleted elements are moved to a `bl-ac sync - Removed` collection (you can change this to hide, keep, or delete). Not checked when only part of the model is exported (selection or one story).
+- Deleted elements are moved to a `bl-ac sync - Removed` collection, which starts hidden (you can change this to hide, keep, or delete). Not checked when only part of the model is exported (selection or one story).
 - Each object remembers which Archicad element it came from, so renaming or moving it in Blender is fine.
 
 ---
@@ -102,11 +102,13 @@ Image textures: Archicad does not pass texture coordinates (UVs) on, so the tool
 
 New in 0.2.0. A second panel, **bl-ac morphs**, works the other way round. Model a shape in Blender, send it to Archicad as a **Morph** (the element that is painful to model in Archicad), keep working in either program, and bring Archicad's morphs back into Blender.
 
-1. Click the refresh icon at the top of the panel. It needs **Tapir 1.8.0 or newer**.
+1. It needs **Tapir 1.8.0 or newer** (the **bl-ac project** panel shows the connection).
 2. Put your meshes in a Blender collection and choose it in **Collection**.
 3. Press **Sync collection**. New and changed meshes are sent to Archicad, and changes you made to those morphs in Archicad come back. Do it again after every change.
 
-Or use the buttons for one direction: **Push** sends the selected objects (or the whole collection), **Pull** brings in the morphs selected in Archicad (or all of them). The **Dry run** checkbox makes every button only show what it would do.
+Or use the buttons for one direction: **Push** sends the selected objects (or the whole collection), **Pull** brings in the morphs selected in Archicad (or all of them). The **Dry run** checkbox makes every button only show what it would do; **Apply the dry run** then does it for real.
+
+**Together with the main Sync.** You do not have to use this panel for Archicad's morphs. The main **Sync** leaves morphs out of the IFC (option *Sync morphs both ways*, on by default) and syncs them through this tool instead: new Archicad morphs arrive in the morph collection, your changes to them go back, and meshes you made in Blender are sent. Nothing is duplicated, and morphs an older version put into `bl-ac sync - Objects` are taken over (their mesh is refreshed from Archicad once, then they sync both ways). Morphs on hidden layers come along too. With the option off, or with a Tapir older than 1.8.0, morphs arrive through the IFC as plain one-way objects.
 
 - An object keeps its morph: sending it again changes the same morph, so its layer, ID and properties in Archicad stay.
 - If the same morph changed in both programs since the last sync, it is skipped and listed. Nothing is overwritten (unless you choose *Overwrite*), and nothing is ever deleted.
@@ -118,7 +120,6 @@ Or use the buttons for one direction: **Push** sends the selected objects (or th
 - Archicad faces must be flat, so **warped faces become triangles** when you push. Flat quads and n-gons stay as they are, but a curved or sculpted mesh arrives as a triangle mesh, and there is no rounding in Archicad's morphs.
 - Very dense meshes work but are slow (about 8 seconds for 50,000 faces).
 - It is experimental. Try it on a copy of your project first.
-- The sync from Archicad (above) also brings morphs in, as generic objects, so using both panels on the same project duplicates them in Blender.
 
 Details, limits and measurements: [`docs/MORPHS.md`](docs/MORPHS.md).
 
@@ -150,7 +151,7 @@ I'm an architecture student, this tool was made primarily for myself, but sharin
 | "Tapir ... is installed, but 1.7.1 or newer is required" | Install the newest Tapir and restart Archicad. |
 | Elements missing | Read the report, then see [`docs/ARCHICAD_SETUP.md`](docs/ARCHICAD_SETUP.md). |
 | Textures look stretched | The material needs a **Texture Coordinate > UV** node, and **Generate UVs** must be on. |
-| Model sits in the wrong place | Check **Archicad coordinates** and **Offset** in **Output**. |
+| Model sits in the wrong place | Check **Archicad coordinates** in **Output** and **Offset** under **Shared settings** (bl-ac project). |
 | "Morph sync needs Tapir 1.8.0 or newer" | Install the newest Tapir and restart Archicad. |
 | "Archicad refused the morph" | Most likely an edge that is shared by more than two faces. The report names the object; **Select > Select All by Trait > Non Manifold** in Blender shows the edges. |
 

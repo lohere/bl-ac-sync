@@ -151,6 +151,16 @@ class ACSyncSettings(PropertyGroup):
         ),
         default=False,
     )
+    morphs: BoolProperty(
+        name="Sync morphs both ways",
+        description=(
+            "Archicad Morphs are not read from the IFC. Sync puts them in the morph collection "
+            "(bl-ac morphs panel) instead and syncs them both ways there: changes made in Blender "
+            "go back to Archicad, and meshes made in Blender are not duplicated by the IFC. "
+            "Needs Tapir 1.8.0 or newer; with an older Tapir morphs come in as plain objects"
+        ),
+        default=True,
+    )
     select_changed: BoolProperty(
         name="Select changed objects",
         description="After a sync or dry run, select the objects that were added or changed "

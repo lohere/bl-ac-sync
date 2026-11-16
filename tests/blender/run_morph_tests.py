@@ -522,6 +522,73 @@ def test_tooltips_follow_the_scope_and_the_dry_run_switch():
     assert cls.description(None, dry).startswith("Preview only:")
 
 
+def ifc_object(guid, name="MORPH-IFC"):
+    """What the IFC sync leaves in the scene for an Archicad element."""
+    obj = make_mesh(name, CUBE_V, CUBE_F)
+    obj["acsync_root"] = "bl-ac sync"
+    obj["acsync_guid"] = guid
+    obj["acsync_hash"] = "abc"
+    obj["acsync_offset"] = "0.0000,0.0000,0.0000"
+    obj["acsync_uv"] = "none"
+    obj["acsync_slots"] = "[]"
+    return obj
+
+
+def test_a_morph_the_ifc_sync_made_is_taken_over_and_becomes_two_way():
+    fresh()
+    guid = FAKE.add(box_geometry(size=2.0))
+    obj = ifc_object(guid)
+    dry = pull(dry=True)
+    assert "1 taken over" in dry.diff_summary, dry.diff_summary
+    assert obj.get("acsync_guid") and not obj.get(me.PROP_GUID), "a dry run must change nothing"
+    report = pull()
+    assert "1 taken over" in report.diff_summary, report.diff_summary
+    assert obj[me.PROP_GUID] == guid
+    assert not [k for k in obj.keys() if k in ("acsync_guid", "acsync_root", "acsync_hash")]  # noqa: SIM118
+    assert [c.name for c in obj.users_collection] == ["bl-ac morphs"]
+    assert len(bpy.data.objects) == 1, "no duplicate was made"
+    assert world_vertices(obj) == ac_vertices(guid)  # Archicad's version
+    obj.data.vertices[6].co.z += 1.0  # now Blender edits go back to Archicad
+    obj.data.update()
+    assert "1 updated" in push([obj]).diff_summary
+    assert ac_vertices(guid) == world_vertices(obj)
+    assert "1 unchanged" in pull().diff_summary
+
+
+def test_main_sync_imports_new_morphs_and_sends_new_meshes_without_duplicates():
+    scene = fresh()
+    theirs = FAKE.add(box_geometry())
+    mine = cube("Mine", location=(5, 0, 0))
+    me.morph_collection(scene, scene.acmorph.collection).objects.link(mine)
+    report = me.sync_all(scene, scene.acsync, scene.acmorph, FAKE)
+    assert "1 new" in report.diff_summary and "1 created" in report.diff_summary, report.diff_summary
+    assert len(FAKE.morphs) == 2 and theirs in me.morph_objects() and mine[me.PROP_GUID] in FAKE.morphs
+    again = me.sync_all(scene, scene.acsync, scene.acmorph, FAKE)
+    assert "0 new, 0 changed, 2 unchanged" in again.diff_summary, again.diff_summary
+    assert "0 created, 0 updated, 2 unchanged" in again.diff_summary, again.diff_summary
+    assert len(FAKE.morphs) == 2 and len(bpy.data.objects) == 2
+
+
+def test_main_sync_goes_through_the_operator_and_reports_the_morphs():
+    scene = fresh()
+    scene.acsync.source = "FILE"
+    FAKE.add(box_geometry())
+    report_text = morph_ops.sync_everything(bpy.context, dry_run=False)
+    assert "1 new" in report_text.diff_summary
+    assert len(bpy.data.objects) == 1
+
+
+def test_apply_runs_the_last_dry_run_of_a_morph_button():
+    fresh()
+    FAKE.add(box_geometry())
+    assert not morph_ops.pending
+    assert bpy.ops.acmorph.pull("EXEC_DEFAULT", dry_run=True, scope="ALL") == {"FINISHED"}
+    assert morph_ops.pending == ("pull", {"scope": "ALL"}) and not bpy.data.objects
+    assert bpy.ops.acmorph.apply("EXEC_DEFAULT") == {"FINISHED"}
+    assert len(bpy.data.objects) == 1 and morph_ops.pending is None
+    expect_error("poll", bpy.ops.acmorph.apply, "EXEC_DEFAULT")
+
+
 def test_the_panel_draws_and_only_uses_things_that_exist():
     from unittest.mock import MagicMock
 
@@ -532,6 +599,7 @@ def test_the_panel_draws_and_only_uses_things_that_exist():
     bpy.data.texts.new("bl-ac morphs Report")
     for panel in (morph_ui.ACMORPH_PT_main, morph_ui.ACMORPH_PT_options):
         layout = MagicMock()
+        layout.panel.return_value = (layout, layout)  # a collapsible block: header and body
         panel.draw(type("Self", (), {"layout": layout}), bpy.context)
         for call in layout.mock_calls:
             if call[0].endswith("operator") or ".operator" in call[0]:

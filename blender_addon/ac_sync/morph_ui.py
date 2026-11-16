@@ -4,7 +4,7 @@
 import bpy
 from bpy.types import Panel
 
-from . import operators, ui
+from . import morph_ops, operators, ui
 
 
 class _Base:
@@ -31,20 +31,7 @@ class ACMORPH_PT_main(_Base, Panel):
         m = context.scene.acmorph
         busy = operators.is_busy()
 
-        box = layout.box()
-        state = operators.connection
-        row = box.row(align=True)
-        if not state.checked:
-            row.label(text="Archicad: not checked", icon="QUESTION")
-        elif state.ok:
-            row.label(text=state.project, icon="CHECKMARK")
-        else:
-            row.label(text="Archicad not ready", icon="ERROR")
-        row.operator("acsync.refresh", text="", icon="FILE_REFRESH")
-        if state.checked and not state.ok:
-            ui._lines(box, state.message)
-        box.label(text="Needs Tapir 1.8.0 or newer")
-
+        layout.label(text="Needs Tapir 1.8.0 or newer")
         layout.prop_search(m, "collection", bpy.data, "collections", icon="OUTLINER_COLLECTION")
 
         col = layout.column(align=True)
@@ -66,14 +53,16 @@ class ACMORPH_PT_main(_Base, Panel):
         _button(row, m, "acmorph.pull", "All", "IMPORT", scope="ALL")
 
         layout.prop(m, "dry_run")
+        if morph_ops.pending is not None:
+            layout.operator("acmorph.apply", text="Apply the dry run", icon="CHECKMARK")
         layout.prop(m, "conflict")
 
         if m.last_summary:
-            box = layout.box()
-            box.label(text="Last result", icon="TEXT")
-            ui._lines(box, m.last_summary)
-            if bpy.data.texts.get("bl-ac morphs Report"):
-                box.operator("acmorph.copy_report", icon="COPYDOWN")
+            box = ui.collapsible(layout, "acmorph_last_result", "Last result", "TEXT")
+            if box is not None:
+                ui._lines(box, m.last_summary)
+                if bpy.data.texts.get("bl-ac morphs Report"):
+                    box.operator("acmorph.copy_report", icon="COPYDOWN")
 
 
 class ACMORPH_PT_options(_Base, Panel):
@@ -88,7 +77,7 @@ class ACMORPH_PT_options(_Base, Panel):
         col.prop(m, "apply_modifiers")
         col.prop(m, "flatness")
         col.operator("acmorph.detach", icon="UNLINKED")
-        col.label(text="Offset, port and materials: see bl-ac sync")
+        col.label(text="Offset and port: see bl-ac project. Materials: see bl-ac sync")
 
 
 CLASSES = (ACMORPH_PT_main, ACMORPH_PT_options)

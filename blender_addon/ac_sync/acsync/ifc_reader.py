@@ -80,6 +80,8 @@ class IfcModel:
     skipped: list[Skipped] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     uv_scale: float | None = None  # metres per UV unit, None = no UVs were generated
+    # GUIDs (upper case) deliberately left out because another tool owns them (the morph tool)
+    handled_elsewhere: set[str] = field(default_factory=set)
 
     def surface_names(self) -> list[str]:
         names = {s.name for e in self.elements.values() for s in e.surfaces}
@@ -153,12 +155,16 @@ def read_ifc(
     threads: int | None = None,
     archicad_coordinates: bool = True,
     uv_scale: float | None = None,
+    skip_guids: Iterable[str] = (),
 ) -> IfcModel:
     """Read all geometry-carrying products of an IFC file, keyed by Archicad GUID.
 
     With ``archicad_coordinates`` (default) the IfcSite placement is undone so geometry is in
     Archicad's own model coordinates (what Archicad and the old FBX export use). Pass False
     to keep the rotated IFC world coordinates.
+
+    Products whose Archicad GUID is in ``skip_guids`` are not read at all (no geometry is
+    built): another tool owns them. They are listed in ``model.handled_elsewhere``.
     """
     import ifcopenshell
     from ifcopenshell import geom, ifcopenshell_wrapper
@@ -191,10 +197,19 @@ def read_ifc(
         model.skipped.append(
             Skipped(entity.is_a(), str(getattr(entity, "Name", "") or ""), "excluded type")
         )
+    handled = {str(g).upper() for g in skip_guids}
+    if handled:
+        for entity in ifc.by_type("IfcProduct"):
+            guid = str(getattr(entity, "Tag", None) or "").upper()
+            if guid in handled:
+                exclude_entities.append(entity)
+                model.handled_elsewhere.add(guid)
 
     kwargs = {"exclude": exclude_entities} if exclude_entities else {}
     iterator = geom.iterator(settings, ifc, threads or default_threads(), **kwargs)
     if not iterator.initialize():
+        if model.handled_elsewhere:  # nothing but elements another tool owns
+            return model
         raise IfcReadError("The IFC file contains no geometry (or all of it is excluded).")
 
     while True:
@@ -221,7 +236,7 @@ def read_ifc(
         if not iterator.next():
             break
 
-    if not model.elements:
+    if not model.elements and not model.handled_elsewhere:
         raise IfcReadError("No elements with an Archicad GUID were found in the IFC file.")
     return model
 

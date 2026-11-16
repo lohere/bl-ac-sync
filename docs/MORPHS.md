@@ -5,8 +5,8 @@ simple geometry the other way: model a mesh in Blender, **Push** it to Archicad 
 editing in either program, and **Pull** Archicad's morphs into Blender. Morphs are the Archicad element
 that is painful to model by hand, which is why they come first.
 
-Needs **Tapir 1.8.0 or newer** (the sync from Archicad does not). Status: proof of concept on the
-`feature/two-way-morphs` branch, tested on Archicad 29 with Tapir 1.8.0.
+Needs **Tapir 1.8.0 or newer** (the sync from Archicad does not). Status: experimental, tested on
+Archicad 29 with Tapir 1.8.0.
 
 ## What it does
 
@@ -23,6 +23,24 @@ Per face it carries the **material** both ways (see below), keeps **n-gons**, co
 or bevel arrives as plain faces. Faces that are not flat are split into triangles (see *Limits*);
 the report says how many. A mesh with an edge on more than two faces is warned about, since
 Archicad cannot build it. Faces with holes that come from Archicad are split into triangles in Blender.
+
+## Together with the IFC sync
+
+The IFC export contains morphs too (as generic objects with the same GUID), so two tools would make two
+objects for one morph, and an object made here would come back from the IFC as a second copy. Therefore
+one tool owns a morph at a time, and it is this one:
+
+* The main Sync (option *Sync morphs both ways* on, Tapir 1.8.0+) asks Archicad for its morph GUIDs
+  (`GetElementsByType`) and leaves those elements out of the IFC read. They are not read, not compared
+  and never reported as removed, and the completeness check counts them as present. After the IFC part
+  it runs `sync_all`: pull every morph (new ones into the collection, changed ones in place), then push
+  every new or changed mesh of the collection; conflicts are skipped and listed.
+* A morph that an older version brought in through the IFC (`acsync_guid` on the object) is **adopted**
+  by the pull: the IFC properties are removed, the morph properties set, the object moves into the
+  morph collection and its mesh is refreshed from Archicad once. Name, modifiers and material choices stay.
+  Edits made to such an object in Blender before that are replaced, as the next IFC change would have
+  done anyway. A dry run only reports it.
+* Without the option, or with an older Tapir, nothing changes: morphs come through the IFC, one way.
 
 ## Not losing work
 
@@ -45,8 +63,8 @@ copy a morph of its own. Detaching never touches Archicad.
 
 ## Coordinates and materials
 
-* Blender world coordinates = Archicad project coordinates + the model **Offset** of the IFC sync
-  (shared setting). Both programs are Z-up and use metres; no axis swap.
+* Blender world coordinates = Archicad project coordinates + the model **Offset** (bl-ac project >
+  Shared settings, used by both tools). Both programs are Z-up and use metres; no axis swap.
 * A pulled object's pivot is the morph's own origin. A pushed morph's origin is the object's origin.
 * Material -> surface when pushing, first match wins: the surface the IFC sync recorded on the
   material (`acsync_surface`), the **Materials** table of the IFC sync (reversed), the material's name,
@@ -124,9 +142,8 @@ No IFC is involved. The core is in `acsync/morphs.py` (no Blender), the Blender 
 * Changing *Apply modifiers* changes what is sent, so the next sync sees the object as changed.
 * Pushing creates one Archicad undo step per request (a batch is one request). Not yet checked in the
   Archicad UI.
-* The IFC sync (the other panel) also imports morphs, as generic objects. Using both tools on the same
-  project duplicates them in Blender, one copy per tool. Planned, not a priority: a choice in the IFC
-  sync for people who do not use the morph tool, or a smarter match between the two.
+* The main Sync (IFC) hands morphs to this tool, see *Together with the IFC sync*. The sync runs on the
+  main thread after the IFC part, so Blender is unresponsive for the seconds the morphs take.
 * The calls run on the main thread; Blender is unresponsive while a very large mesh is sent.
 * Objects (library parts) and Archicad Meshes (terrain) are not covered. `SetLibraryPartScripts` exists
   in Tapir 1.8.0, which makes generated objects possible later.
